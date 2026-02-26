@@ -4,6 +4,104 @@
 #include <cctype>
 #include <sstream>
 
+#include "CsvReader.h"
+
+
+// --------------- containsAllTokens ----------------
+bool SearchEngine::containsAllTokens(const std::string& text,
+                                     const std::vector<std::string>& tokens) {
+    for (const auto& tok : tokens) {
+        if (tok.empty()) continue;
+        if (text.find(tok) == std::string::npos) return false;
+    }
+    return true;
+}
+
+// --------------- computeIDF ----------------
+double SearchEngine::computeIDF(const std::string& token) const {
+    auto it = wordIndex.find(token);
+    if (it == wordIndex.end()) return 0.0;
+
+    double df = (double)it->second.size();
+    double N  = (double)movies.size();
+    return std::log((N + 1.0) / (df + 1.0));
+}
+
+// --------------- scoreUnifiedTokens ----------------
+// Unificado para palabra y frase:
+// - Título: TF (saturado) con peso alto
+// - Sinopsis: TF-IDF (TF saturado) con peso
+// - Bonos: AND por campo + frase exacta por campo (prioridad título>full)
+// - Normalización por #tokens para no inflar frases largas
+double SearchEngine::scoreUnifiedTokens(const Movie& m,
+                                        const std::vector<std::string>& tokens,
+                                        const std::string& query_norm) const
+{
+    const std::string& title = m.getTitle();
+    const std::string& plot  = m.getPlot();
+    const std::string& full  = m.getFullText();
+
+    const double L = (double)std::max<size_t>(1, tokens.size()); // largo query
+
+    // Pesos por campo (calibrables)
+    constexpr double W_TITLE = 10.0; // título domina
+    constexpr double W_PLOT  = 1.0;  // sinopsis aporta por TF-IDF
+
+    // Bonos (NO enteros perfectos para evitar colapsar a 10.000 siempre)
+    constexpr double AND_TITLE_BONUS = 9;
+    constexpr double AND_PLOT_BONUS  = 4;
+    constexpr double AND_FULL_BONUS  = 2;
+
+    constexpr double PHRASE_TITLE_BONUS = 10;
+    constexpr double PHRASE_FULL_BONUS  = 4;
+
+    constexpr double LIKE_WEIGHT = 0.3;
+
+    double score = 0.0;
+
+    // --------- Score base por token ----------
+    for (const auto& tok : tokens) {
+        if (tok.empty()) continue;
+
+        // Título: TF saturado (evita múltiplos de 10)
+        int tf_title = countOccurrences(title, tok);
+        score += W_TITLE * std::log1p((double)tf_title);
+
+        // Sinopsis: TF-IDF con TF saturado
+        double idf = computeIDF(tok);
+        int tf_plot = countOccurrences(plot, tok);
+        score += W_PLOT * std::log1p((double)tf_plot) * idf;
+    }
+
+    // --------- Bonos solo si es frase ----------
+    if (tokens.size() > 1) {
+        bool all_title = containsAllTokens(title, tokens);
+        bool all_plot  = containsAllTokens(plot, tokens);
+        bool all_full  = containsAllTokens(full, tokens);
+
+        // AND por campo: escala por L para que no se "divida" a enteros al final
+        if (all_title)      score += AND_TITLE_BONUS * L;
+        else if (all_plot)  score += AND_PLOT_BONUS  * L;
+        else if (all_full)  score += AND_FULL_BONUS  * L;
+
+        // Frase exacta por campo: prioridad título > full
+        if (title.find(query_norm) != std::string::npos)
+            score += PHRASE_TITLE_BONUS * L;
+        else if (full.find(query_norm) != std::string::npos)
+            score += PHRASE_FULL_BONUS * L;
+    }
+
+    // Popularidad
+    score += LIKE_WEIGHT * std::log1p((double)m.getLikes());
+
+    // Normalización por largo query (evita inflar frases largas)
+    score /= L;
+
+    return score;
+}
+
+
+
 void SearchEngine::buildTrigramIndex() {
     // Construye trigramas (n=3) sobre full_text
     for (MovieId i = 0; i < (MovieId) movies.size(); ++i) {
@@ -36,15 +134,6 @@ SearchEngine::intersectSorted(const std::vector<MovieId> &a,
     return out;
 }
 
-double SearchEngine::scoreMovie(const Movie &m, const std::string &q) {
-    // Ranking simple y defendible
-    // +10 si aparece en title, +3 si aparece en plot, +log(1+likes)
-    double s = 0.0;
-    if (m.getTitle().find(q) != std::string::npos) s += 10.0;
-    if (m.getPlot().find(q) != std::string::npos) s += 3.0;
-    s += std::log(1.0 + (double) m.getLikes());
-    return s;
-}
 
 std::vector<SearchResult>
 SearchEngine::searchSubstring(const std::string &q_norm,
@@ -53,26 +142,34 @@ SearchEngine::searchSubstring(const std::string &q_norm,
     std::vector<SearchResult> empty;
     if (q_norm.empty()) return empty;
 
-    // Queries cortas: por ahora fallback a scan directo (para que funcione ya)
-    // Luego lo mejoramos con word index.
+    // Tokens para scoring unificado (una palabra)
+    std::vector<std::string> tokens = {q_norm};
+
+    // ---- Caso corto: len < 3 (no hay trigramas) -> scan directo ----
     if (q_norm.size() < 3) {
-        std::vector<SearchResult> all;
-        all.reserve(256);
+        std::vector<SearchResult> results;
+        results.reserve(256);
+
         for (MovieId i = 0; i < (MovieId) movies.size(); ++i) {
-            if (movies[i].getFullText().find(q_norm) != std::string::npos) {
-                all.push_back({i, scoreMovie(movies[i], q_norm)});
+            const Movie &m = movies[i];
+            if (m.getFullText().find(q_norm) != std::string::npos) {
+                double s = scoreUnifiedTokens(m, tokens, q_norm);
+                results.push_back({i, s});
             }
         }
-        std::sort(all.begin(), all.end(), [](auto &x, auto &y) {
-            if (x.score != y.score) return x.score > y.score;
-            return x.movieId < y.movieId;
-        });
-        if (offset >= all.size()) return empty;
-        size_t end = std::min(all.size(), offset + limit);
-        return std::vector<SearchResult>(all.begin() + offset, all.begin() + end);
+
+        std::sort(results.begin(), results.end(),
+                  [](const SearchResult &a, const SearchResult &b) {
+                      if (a.score != b.score) return a.score > b.score;
+                      return a.movieId < b.movieId;
+                  });
+
+        if (offset >= results.size()) return empty;
+        size_t end = std::min(results.size(), offset + limit);
+        return std::vector<SearchResult>(results.begin() + offset, results.begin() + end);
     }
 
-    // 1) candidatos por trigramas (intersección)
+    // ---- 1) Candidatos por trigramas: intersección de postings ----
     std::vector<MovieId> cand;
     bool first = true;
 
@@ -82,51 +179,40 @@ SearchEngine::searchSubstring(const std::string &q_norm,
         if (!p) return empty;
 
         if (first) {
-            cand = *p;
+            cand = *p; // postings ordenados+unique si llamaste finalize()
             first = false;
         } else {
             cand = intersectSorted(cand, *p);
         }
+
         if (cand.empty()) return empty;
     }
 
-    // 2) verificación exacta + ranking
+    // ---- 2) Verificación exacta + ranking unificado ----
     std::vector<SearchResult> results;
     results.reserve(std::min<size_t>(cand.size(), 4096));
 
     for (MovieId id: cand) {
         const Movie &m = movies[id];
+
+        // verificación exacta (evita falsos positivos del filtro por n-gram)
         if (m.getFullText().find(q_norm) != std::string::npos) {
-            results.push_back({id, scoreMovie(m, q_norm)});
+            double s = scoreUnifiedTokens(m, tokens, q_norm);
+            results.push_back({id, s});
         }
     }
 
-    // 3) ordenar por score desc y paginar
-    std::sort(results.begin(), results.end(), [](const SearchResult &a, const SearchResult &b) {
-        if (a.score != b.score) return a.score > b.score;
-        return a.movieId < b.movieId;
-    });
+    // ---- 3) Orden y paginación ----
+    std::sort(results.begin(), results.end(),
+              [](const SearchResult &a, const SearchResult &b) {
+                  if (a.score != b.score) return a.score > b.score;
+                  return a.movieId < b.movieId;
+              });
 
     if (offset >= results.size()) return empty;
     size_t end = std::min(results.size(), offset + limit);
     return std::vector<SearchResult>(results.begin() + offset, results.begin() + end);
 }
-
-// void SearchEngine::buildTagIndex() {
-//     tagIndex.clear();
-//     tagIndex.reserve(movies.size() / 4); // heurística ligera
-//
-//     for (MovieId i = 0; i < (MovieId) movies.size(); ++i) {
-//         for (const auto &tag: movies[i].getTags()) {
-//             if (!tag.empty()) tagIndex[tag].push_back(i);
-//         }
-//     }
-//
-//     // sort+unique por cada tag para intersecciones/orden y evitar repetidos
-//     for (auto &kv: tagIndex) {
-//         sortUnique(kv.second);
-//     }
-// }
 
 void SearchEngine::buildTagIndex() {
     tagIndex.clear();
@@ -192,7 +278,7 @@ SearchEngine::searchByTag(const std::string &tag_norm,
 
 
 // Tokeniza por espacios (query_norm ya está limpio)
-static std::vector<std::string> tokenize_ws(const std::string& s) {
+static std::vector<std::string> tokenize_ws(const std::string &s) {
     std::vector<std::string> out;
     std::istringstream iss(s);
     std::string tok;
@@ -206,35 +292,43 @@ void SearchEngine::buildWordIndex() {
     wordIndex.clear();
     wordIndex.reserve(movies.size()); // heurística
 
-    for (MovieId i = 0; i < (MovieId)movies.size(); ++i) {
+    for (MovieId i = 0; i < (MovieId) movies.size(); ++i) {
         // Indexamos palabras de título + sinopsis (ya normalizados en Movie)
-        const std::string& text = movies[i].getFullText();
+        const std::string &text = movies[i].getFullText();
         auto tokens = tokenize_ws(text);
 
-        for (const auto& w : tokens) {
+        for (const auto &w: tokens) {
             if (!w.empty()) wordIndex[w].push_back(i);
         }
     }
 
     // sort+unique por palabra para poder unir/intersectar rápido
-    for (auto& kv : wordIndex) {
+    for (auto &kv: wordIndex) {
         sortUnique(kv.second);
     }
 }
 
 std::vector<SearchEngine::MovieId>
-SearchEngine::unionSorted(const std::vector<MovieId>& a,
-                          const std::vector<MovieId>& b) {
+SearchEngine::unionSorted(const std::vector<MovieId> &a,
+                          const std::vector<MovieId> &b) {
     std::vector<MovieId> out;
     out.reserve(a.size() + b.size());
-    size_t i=0, j=0;
-    while (i<a.size() && j<b.size()) {
-        if (a[i]==b[j]) { out.push_back(a[i]); ++i; ++j; }
-        else if (a[i]<b[j]) { out.push_back(a[i]); ++i; }
-        else { out.push_back(b[j]); ++j; }
+    size_t i = 0, j = 0;
+    while (i < a.size() && j < b.size()) {
+        if (a[i] == b[j]) {
+            out.push_back(a[i]);
+            ++i;
+            ++j;
+        } else if (a[i] < b[j]) {
+            out.push_back(a[i]);
+            ++i;
+        } else {
+            out.push_back(b[j]);
+            ++j;
+        }
     }
-    while (i<a.size()) out.push_back(a[i++]);
-    while (j<b.size()) out.push_back(b[j++]);
+    while (i < a.size()) out.push_back(a[i++]);
+    while (j < b.size()) out.push_back(b[j++]);
 
     // out ya queda ordenado; puede tener repetidos si a/b no eran unique (pero lo son)
     // igual lo dejamos robusto:
@@ -242,7 +336,7 @@ SearchEngine::unionSorted(const std::vector<MovieId>& a,
     return out;
 }
 
-int SearchEngine::countOccurrences(const std::string& text, const std::string& pattern) {
+int SearchEngine::countOccurrences(const std::string &text, const std::string &pattern) {
     if (pattern.empty()) return 0;
     int cnt = 0;
     size_t pos = 0;
@@ -256,9 +350,10 @@ int SearchEngine::countOccurrences(const std::string& text, const std::string& p
 }
 
 std::vector<SearchResult>
-SearchEngine::searchPhrase(const std::string& query_norm,
+SearchEngine::searchPhrase(const std::string &query_norm,
                            size_t offset,
-                           size_t limit) const {
+                           size_t limit) const
+{
     std::vector<SearchResult> empty;
     if (query_norm.empty()) return empty;
 
@@ -266,79 +361,108 @@ SearchEngine::searchPhrase(const std::string& query_norm,
     auto tokens = tokenize_ws(query_norm);
     if (tokens.empty()) return empty;
 
-    // 2) obtener postings por token (si un token no existe, su postings es vacío)
+    // 2) candidatos OR y AND usando wordIndex (rápido)
     std::vector<MovieId> cand_or;
     bool first_or = true;
 
-    // Para AND: empezamos con postings del primer token existente.
     std::vector<MovieId> cand_and;
     bool and_initialized = false;
 
-    for (const auto& t : tokens) {
+    for (const auto &t : tokens) {
         auto it = wordIndex.find(t);
-        if (it == wordIndex.end()) {
-            // token no existe => para AND, hace imposible cumplir todos
-            continue;
-        }
-        const auto& p = it->second;
+        if (it == wordIndex.end()) continue;
+        const auto &p = it->second;
 
         // OR
         if (first_or) { cand_or = p; first_or = false; }
-        else { cand_or = unionSorted(cand_or, p); }
+        else          { cand_or = unionSorted(cand_or, p); }
 
         // AND
         if (!and_initialized) { cand_and = p; and_initialized = true; }
-        else { cand_and = intersectSorted(cand_and, p); }
+        else                  { cand_and = intersectSorted(cand_and, p); }
     }
 
-    if (first_or) {
-        // Ningún token existía
-        return empty;
-    }
+    if (first_or) return empty; // ningún token existía en el índice
 
-    // 3) Ranking de candidatos OR, con bonus si está en AND, bonus si frase exacta
-    std::vector<SearchResult> results;
-    results.reserve(std::min<size_t>(cand_or.size(), 10000));
-
-    // Para chequear rápido si id pertenece a cand_and:
-    // cand_and está ordenado => usamos binary_search
     auto in_and = [&](MovieId id) {
         if (!and_initialized) return false;
         return std::binary_search(cand_and.begin(), cand_and.end(), id);
     };
 
+    // 3) ranking por campos (título > sinopsis), TF-IDF solo en plot
+    constexpr double W_TITLE = 10.0;
+    constexpr double W_PLOT  = 1.0;
+
+    constexpr double AND_TITLE_BONUS = 30.0;
+    constexpr double AND_PLOT_BONUS  = 15.0;
+    constexpr double AND_FULL_BONUS  = 8.0;
+
+    constexpr double PHRASE_TITLE_BONUS = 25.0;
+    constexpr double PHRASE_FULL_BONUS  = 12.0;
+
+    constexpr double LIKE_WEIGHT = 0.3;
+
+    std::vector<SearchResult> results;
+    results.reserve(std::min<size_t>(cand_or.size(), 10000));
+
+    const double L = (double)std::max<size_t>(1, tokens.size());
+
     for (MovieId id : cand_or) {
-        const Movie& m = movies[id];
-        const std::string& title = m.getTitle();
-        const std::string& plot  = m.getPlot();
-        const std::string& full  = m.getFullText();
+        const Movie &m = movies[id];
+        const std::string &title = m.getTitle();
+        const std::string &plot  = m.getPlot();
+        const std::string &full  = m.getFullText();
 
-        double s = 0.0;
+        double content = 0.0;
 
-        // Score por ocurrencias de tokens (y/o)
-        for (const auto& t : tokens) {
+        // score base por token
+        for (const auto &t : tokens) {
             if (t.empty()) continue;
 
-            // pesos diferenciados: título pesa más
-            s += 10.0 * (double)countOccurrences(title, t);
-            s += 3.0  * (double)countOccurrences(plot, t);
+            int tf_title = countOccurrences(title, t);
+            int tf_plot  = countOccurrences(plot,  t);
+
+            // título: TF saturado con peso alto (evita explotar)
+            content += W_TITLE * std::log1p((double)tf_title);
+
+            // sinopsis: TF-IDF plot-only (TF saturado)
+            double idf = computeIDF(t);
+            content += W_PLOT * std::log1p((double)tf_plot) * idf;
         }
 
-        // Bonus por cumplir todas las palabras (AND)
-        if (in_and(id)) s += 25.0;
+        // normaliza solo el contenido (no los bonos)
+        content /= L;
 
-        // Bonus por contener la frase completa exacta
-        if (full.find(query_norm) != std::string::npos) s += 40.0;
+        double bonus = 0.0;
 
-        // Boost por likes
-        s += std::log(1.0 + (double)m.getLikes());
+        // AND por campo con prioridad
+        if (tokens.size() > 1) {
+            bool all_title = containsAllTokens(title, tokens);
+            bool all_plot  = containsAllTokens(plot, tokens);
+            bool all_full  = containsAllTokens(full, tokens);
 
-        // Si por alguna razón s=0 (muy raro), igual lo dejamos
+            if (all_title)      bonus += AND_TITLE_BONUS;
+            else if (all_plot)  bonus += AND_PLOT_BONUS;
+            else if (all_full)  bonus += AND_FULL_BONUS;
+
+            // frase exacta: prioridad título > full
+            if (title.find(query_norm) != std::string::npos)      bonus += PHRASE_TITLE_BONUS;
+            else if (full.find(query_norm) != std::string::npos)  bonus += PHRASE_FULL_BONUS;
+        }
+
+        // likes suave
+        double pop = LIKE_WEIGHT * std::log1p((double)m.getLikes());
+
+        double s = content + bonus + pop;
+
+        // Si además quieres usar tu AND del índice como señal extra (opcional):
+        // if (in_and(id)) s += 1.0;
+
         results.push_back({id, s});
     }
 
     std::sort(results.begin(), results.end(),
-              [](const SearchResult& a, const SearchResult& b) {
+              [](const SearchResult &a, const SearchResult &b) {
                   if (a.score != b.score) return a.score > b.score;
                   return a.movieId < b.movieId;
               });
@@ -346,4 +470,15 @@ SearchEngine::searchPhrase(const std::string& query_norm,
     if (offset >= results.size()) return empty;
     size_t end = std::min(results.size(), offset + limit);
     return std::vector<SearchResult>(results.begin() + offset, results.begin() + end);
+}
+
+void SearchEngine::buildIndexes() {
+    buildTrigramIndex();
+    buildWordIndex();
+    buildTagIndex();
+}
+
+void SearchEngine::load(const std::string &csvPath) {
+    auto ms = CsvReader::cargar_csv(csvPath);
+    setMovies(std::move(ms));
 }

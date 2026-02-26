@@ -28,7 +28,6 @@ private:
     static std::vector<MovieId> intersectSorted(const std::vector<MovieId> &a,
                                                 const std::vector<MovieId> &b);
 
-    static double scoreMovie(const Movie &m, const std::string &q);
 
     static void sortUnique(std::vector<MovieId> &v) {
         std::sort(v.begin(), v.end());
@@ -65,6 +64,28 @@ public:
     std::vector<SearchResult> searchPhrase(const std::string &query_norm,
                                            size_t offset = 0,
                                            size_t limit = 5) const;
+
+
+    double computeIDF(const std::string &token) const;
+
+
+    static bool containsAllTokens(const std::string &text,
+                                  const std::vector<std::string> &tokens);
+
+    double scoreUnifiedTokens(const Movie &m,
+                              const std::vector<std::string> &tokens,
+                              const std::string &query_norm) const;
+
+    const Movie &getMovieById(int id) const {
+        return movies.at((size_t) id);
+    }
+
+    size_t movieCount() const {
+        return movies.size();
+    }
+
+    void buildIndexes();
+    void load(const std::string& csvPath);
 };
 
 #endif

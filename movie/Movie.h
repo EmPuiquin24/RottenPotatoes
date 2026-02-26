@@ -31,6 +31,9 @@ public:
   void like() { ++likes; }
   bool isWatchLater() const { return watch_later; }
   void setWatchLater(bool v) { watch_later = v; }
+
+
+  const std::string& getImdbId() const { return imdb_id; }
 };
 
 #endif // MOVIE_H
