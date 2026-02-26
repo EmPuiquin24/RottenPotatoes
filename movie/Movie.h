@@ -1,22 +1,35 @@
-#ifndef MOVIE_H 
-#define MOVIE_H 
+#ifndef MOVIE_H
+#define MOVIE_H
 
 #include <string>
 #include <vector>
 
 class Movie {
 private:
-    std::string imbd_id;
-    std::string title;
-    std::string plot;
-    std::vector<std::string> tags;
-    std::string split;
-    std::string synopsis_source;
+  std::string imdb_id, title, plot, split, synopsis_source;
+  std::vector<std::string> tags;
+  std::string full_text; // title + " " + plot (normalizado)
+  uint32_t likes = 0;
+  bool watch_later = false;
+
 public:
-    Movie(const std::string& imbd_id, const std::string& title,
-                const std::string& plot, const std::vector<std::string>& tags,
-                const std::string& split, const std::string& synopsis_source)
-        : imbd_id(imbd_id), title(title), plot(plot), tags(tags), split(split), synopsis_source(synopsis_source) {} 
+  Movie(std::string imdb_id_, std::string title_, std::string plot_,
+        std::vector<std::string> tags_, std::string split_, std::string source_)
+      : imdb_id(std::move(imdb_id_)), title(std::move(title_)),
+        plot(std::move(plot_)), tags(std::move(tags_)),
+        split(std::move(split_)), synopsis_source(std::move(source_)) {
+    full_text = title + " " + plot;
+  }
+
+  const std::string &getTitle() const { return title; }
+  const std::string &getPlot() const { return plot; }
+  const std::string &getFullText() const { return full_text; }
+  const std::vector<std::string> &getTags() const { return tags; }
+
+  uint32_t getLikes() const { return likes; }
+  void like() { ++likes; }
+  bool isWatchLater() const { return watch_later; }
+  void setWatchLater(bool v) { watch_later = v; }
 };
 
 #endif // MOVIE_H
