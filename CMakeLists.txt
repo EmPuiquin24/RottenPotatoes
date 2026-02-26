@@ -12,4 +12,7 @@ include_directories(movie)
 file(GLOB_RECURSE SOURCES "csvreader/*.cpp" "movie/*.cpp")
 
 # Crear el ejecutable
-add_executable(${PROJECT_NAME} main.cpp ${SOURCES})
+add_executable(${PROJECT_NAME} main.cpp ${SOURCES}
+        index/NGramTrie.h
+        engine/SearchEngine.h
+        engine/SearchEngine.cpp)
