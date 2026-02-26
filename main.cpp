@@ -19,66 +19,97 @@ int main() {
 
     std::cout << "Construyendo indice trigram...\n";
     engine.buildTrigramIndex();
-    // std::cout << "Nodos en trie: " << engine.getTrigramNodeCount() << "\n";
     std::cout << "Indice listo.\n";
+
+    std::cout << "Construyendo indice de tags...\n";   // <-- AGREGA ESTO
+    engine.buildTagIndex();                             // <-- AGREGA ESTO
+    std::cout << "Indice de tags listo.\n";             // <-- AGREGA ESTO
+
 
     while (true) {
         std::string q;
-        std::cout << "\nBuscar (ENTER para salir): ";
+        std::cout << "\nBuscar (ENTER para salir).\n";
+        std::cout << " - substring: barco\n";
+        std::cout << " - tag: tag:horror  o  tag horror\n";
+        std::cout << "> ";
         std::getline(std::cin, q);
-        if (q.empty()) break;
+        if (q.empty())
+            break;
 
-        //std::string qn = normalizar_texto(q);
-        std::string qn = q;
+        // Detectar modo tag
+        bool isTagQuery = false;
+        std::string tag;
+
+        if (q.rfind("tag:", 0) == 0) {
+            // empieza con "tag:"
+            isTagQuery = true;
+            tag = q.substr(4);
+        } else if (q.rfind("tag ", 0) == 0) {
+            // empieza con "tag "
+            isTagQuery = true;
+            tag = q.substr(4);
+        }
 
         size_t offset = 0;
+
+        if (isTagQuery) {
+            std::string tag_norm = normalizar_texto(tag);
+
+            while (true) {
+                auto page = engine.searchByTag(tag_norm, offset, 5);
+
+                if (page.empty()) {
+                    if (offset == 0)
+                        std::cout << "Sin resultados para tag.\n";
+                    break;
+                }
+
+                const auto &ms = engine.getMovies();
+                for (size_t i = 0; i < page.size(); ++i) {
+                    auto id = page[i].movieId;
+                    std::cout << (offset + i + 1) << ") " << ms[id].getTitle()
+                            << "  [score=" << page[i].score << "]\n";
+                }
+
+                std::cout << "n) siguientes 5 | b) volver : ";
+                std::string opt;
+                std::getline(std::cin, opt);
+                if (opt == "n") {
+                    offset += 5;
+                    continue;
+                }
+                break;
+            }
+
+            continue; // vuelve al inicio del loop
+        }
+
+        // Caso substring normal (lo que ya tenías)
+        std::string qn = normalizar_texto(q);
         while (true) {
             auto page = engine.searchSubstring(qn, offset, 5);
 
             if (page.empty()) {
-                if (offset == 0) std::cout << "Sin resultados.\n";
+                if (offset == 0)
+                    std::cout << "Sin resultados.\n";
                 break;
             }
 
-            const auto& ms = engine.getMovies();
+            const auto &ms = engine.getMovies();
             for (size_t i = 0; i < page.size(); ++i) {
                 auto id = page[i].movieId;
-                std::cout << (offset + i + 1) << ") "
-                          << ms[id].getTitle()
-                          << "  [score=" << page[i].score << "]\n";
+                std::cout << (offset + i + 1) << ") " << ms[id].getTitle()
+                        << "  [score=" << page[i].score << "]\n";
             }
 
-            std::cout << "n) siguientes 5 | b) volver | elegir numero para ver sinopsis: ";
+            std::cout << "n) siguientes 5 | b) volver : ";
             std::string opt;
             std::getline(std::cin, opt);
-
-            if (opt == "n") { offset += 5; continue; }
-            if (opt == "b") break;
-
-            // elegir numero global
-            try {
-                int k = std::stoi(opt);
-                int idxGlobal = k - 1;
-                if (idxGlobal < 0) continue;
-
-                // Para simplificar: recalcular la misma página donde cae (solo demo).
-                // Mejor: guarda el vector total o un cache por query.
-                size_t pageOffset = (size_t)(idxGlobal / 5) * 5;
-                auto pg = engine.searchSubstring(qn, pageOffset, 5);
-                int local = idxGlobal - (int)pageOffset;
-                if (local < 0 || local >= (int)pg.size()) continue;
-
-                auto mid = pg[local].movieId;
-                std::cout << "\n=== " << ms[mid].getTitle() << " ===\n";
-                std::cout << ms[mid].getPlot() << "\n";
-                std::cout << "1) Like  2) Ver mas tarde  3) Volver : ";
-                std::string a;
-                std::getline(std::cin, a);
-                if (a == "1") engine.getMovies()[mid].like();
-                else if (a == "2") engine.getMovies()[mid].setWatchLater(true);
-            } catch (...) {
-                // ignore
+            if (opt == "n") {
+                offset += 5;
+                continue;
             }
+            break;
         }
     }
 
