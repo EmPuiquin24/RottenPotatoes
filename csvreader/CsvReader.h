@@ -11,7 +11,6 @@ std::vector<std::string> dividir(const std::string &cadena, char delimitador);
 
 class CsvReader{
 private:
-    // Función auxiliar para separar respetando las comillas
     static std::vector<std::string> separarColumnas(const std::string& fila_logica) {
         std::vector<std::string> columnas;
         std::string celda;
@@ -30,7 +29,6 @@ private:
         columnas.push_back(celda);
         return columnas;
     }
-
 public:
     static std::vector<Movie> cargar_csv(const std::string &nombre_archivo) {
         std::ifstream archivo(nombre_archivo);
