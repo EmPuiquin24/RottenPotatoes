@@ -55,7 +55,7 @@ double SearchEngine::scoreUnifiedTokens(const Movie& m,
     constexpr double PHRASE_TITLE_BONUS = 10;
     constexpr double PHRASE_FULL_BONUS  = 4;
 
-    constexpr double LIKE_WEIGHT = 0.3;
+    constexpr double LIKE_WEIGHT = 40;
 
     double score = 0.0;
 

@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_set>
 #include <algorithm>
+#include <sstream>
 
 #include "movie/Movie.h"
 #include "engine/SearchEngine.h"
@@ -46,10 +47,28 @@ static bool readYesNo(const std::string &prompt) {
     }
 }
 
+// Primeras N palabras (para no imprimir toda la sinopsis)
+static std::string firstNWords(const std::string& text, size_t n) {
+    std::istringstream iss(text);
+    std::ostringstream oss;
+
+    std::string w;
+    size_t count = 0;
+
+    while (iss >> w) {
+        if (count > 0) oss << ' ';
+        oss << w;
+        ++count;
+        if (count >= n) break;
+    }
+    if (iss >> w) oss << " ...";
+    return oss.str();
+}
+
 // ------------------ Estado del usuario ------------------
 struct UserState {
-    std::unordered_set<int> liked; // movieId
-    std::unordered_set<int> watchLater; // movieId
+    std::unordered_set<int> liked;       // movieId
+    std::unordered_set<int> watchLater;  // movieId
 
     bool isLiked(int id) const { return liked.find(id) != liked.end(); }
     bool isWatchLater(int id) const { return watchLater.find(id) != watchLater.end(); }
@@ -65,14 +84,34 @@ struct UserState {
     }
 };
 
+// ------------------ Boost de usuario en ranking (Modelo A) ------------------
+// Ajusta si quieres que el like tenga más/menos impacto.
+constexpr double USER_LIKE_BOOST = 12.0;
+
+// Aplica boost SOLO a la página actual y reordena esa página (simple y efectivo).
+static void applyUserBoostAndSort(std::vector<SearchResult>& page,
+                                 const UserState& user) {
+    for (auto& r : page) {
+        if (user.isLiked((int)r.movieId)) {
+            r.score += USER_LIKE_BOOST;
+        }
+    }
+
+    std::sort(page.begin(), page.end(),
+              [](const SearchResult& a, const SearchResult& b) {
+                  if (a.score != b.score) return a.score > b.score;
+                  return a.movieId < b.movieId;
+              });
+}
+
 // ------------------ Render de película ------------------
 static void printMovieCard(const Movie &m, int movieId, double score, const UserState &user) {
     std::cout << std::setw(6) << movieId << "  "
-            << m.getTitle()
-            << "  [score=" << score << "]"
-            << (user.isLiked(movieId) ? "  ❤️" : "")
-            << (user.isWatchLater(movieId) ? "  ⏰" : "")
-            << "\n";
+              << m.getTitle()
+              << "  [score=" << score << "]"
+              << (user.isLiked(movieId) ? "  ❤️" : "")
+              << (user.isWatchLater(movieId) ? "  ⏰" : "")
+              << "\n";
 }
 
 static void printMovieDetails(const Movie &m, int movieId, const UserState &user) {
@@ -82,7 +121,6 @@ static void printMovieDetails(const Movie &m, int movieId, const UserState &user
     std::cout << "Liked: " << (user.isLiked(movieId) ? "SI" : "NO") << "\n";
     std::cout << "Ver más tarde: " << (user.isWatchLater(movieId) ? "SI" : "NO") << "\n";
 
-    // Tags (si tienes getter)
     const auto &tags = m.getTags();
     if (!tags.empty()) {
         std::cout << "Tags: ";
@@ -94,83 +132,13 @@ static void printMovieDetails(const Movie &m, int movieId, const UserState &user
     }
 
     clearLine();
-    std::cout << "SINOPSIS:\n";
-    std::cout << m.getPlot() << "\n";
+    std::cout << "SINOPSIS (primeras 100 palabras):\n";
+    std::cout << firstNWords(m.getPlot(), 100) << "\n";
     clearLine();
-}
 
-// ------------------ Flujo: ver resultados y elegir ------------------
-static void browseResults(SearchEngine &engine,
-                          const std::string &query_norm,
-                          bool is_phrase,
-                          UserState &user) {
-    constexpr size_t PAGE = 5;
-    size_t offset = 0;
-
-    while (true) {
-        std::vector<SearchResult> page = is_phrase
-                                             ? engine.searchPhrase(query_norm, offset, PAGE)
-                                             : engine.searchSubstring(query_norm, offset, PAGE);
-
+    if (readYesNo("¿Mostrar sinopsis completa?")) {
+        std::cout << m.getPlot() << "\n";
         clearLine();
-        std::cout << "Resultados (" << (is_phrase ? "FRASE" : "SUBSTRING")
-                << ") query=\"" << query_norm << "\""
-                << "  [offset=" << offset << "]\n";
-        clearLine();
-
-        if (page.empty()) {
-            std::cout << "No hay más resultados.\n";
-        } else {
-            // Mostrar la página
-            for (size_t i = 0; i < page.size(); ++i) {
-                int id = page[i].movieId;
-                const Movie &m = engine.getMovieById(id); // <-- Implementa/expón esto
-                printMovieCard(m, id, page[i].score, user);
-            }
-        }
-
-        std::cout << "\nOpciones:\n";
-        std::cout << "  1) Ver detalles (por ID)\n";
-        std::cout << "  2) Siguiente página\n";
-        std::cout << "  3) Página anterior\n";
-        std::cout << "  4) Salir a menú\n";
-
-        int op = readInt("Elige opción: ", 1, 4);
-
-        if (op == 4) return;
-        if (op == 2) {
-            offset += PAGE;
-            continue;
-        }
-        if (op == 3) {
-            offset = (offset >= PAGE) ? (offset - PAGE) : 0;
-            continue;
-        }
-
-        // Ver detalles
-        int movieId = readInt("Ingresa movieId: ", 0, 2000000000);
-
-        // Si tu engine no tiene getMovieById, cambia esto por movies[movieId] o un map.
-        const Movie &m = engine.getMovieById(movieId);
-
-        // Submenú de detalles
-        while (true) {
-            printMovieDetails(m, movieId, user);
-            std::cout << "Acciones:\n";
-            std::cout << "  1) Toggle Like\n";
-            std::cout << "  2) Toggle Ver más tarde\n";
-            std::cout << "  3) Volver a resultados\n";
-
-            int a = readInt("Elige acción: ", 1, 3);
-            if (a == 3) break;
-
-            if (a == 1) {
-                user.toggleLike(movieId);
-                // Si también quieres incrementar likes global del Movie, hazlo aquí (si lo tienes).
-            } else if (a == 2) {
-                user.toggleWatchLater(movieId);
-            }
-        }
     }
 }
 
@@ -185,15 +153,14 @@ static void showWatchLater(SearchEngine &engine, UserState &user) {
         return;
     }
 
-    // Mostrar listadas
     std::vector<int> ids(user.watchLater.begin(), user.watchLater.end());
     std::sort(ids.begin(), ids.end());
 
-    for (int id: ids) {
+    for (int id : ids) {
         const Movie &m = engine.getMovieById(id);
         std::cout << id << "  " << m.getTitle()
-                << (user.isLiked(id) ? "  ❤️" : "")
-                << "\n";
+                  << (user.isLiked(id) ? "  ❤️" : "")
+                  << "\n";
     }
 
     if (!readYesNo("¿Quieres abrir detalles de alguna?")) return;
@@ -213,29 +180,129 @@ static void showWatchLater(SearchEngine &engine, UserState &user) {
     }
 }
 
+// ------------------ Liked Home ------------------
+static void showLiked(SearchEngine &engine, UserState &user) {
+    clearLine();
+    std::cout << "PELÍCULAS LIKEADAS (" << user.liked.size() << ")\n";
+    clearLine();
+
+    if (user.liked.empty()) {
+        std::cout << "No tienes películas likeadas.\n";
+        return;
+    }
+
+    std::vector<int> ids(user.liked.begin(), user.liked.end());
+    std::sort(ids.begin(), ids.end());
+
+    for (int id : ids) {
+        const Movie &m = engine.getMovieById(id);
+        std::cout << id << "  " << m.getTitle()
+                  << (user.isWatchLater(id) ? "  ⏰" : "")
+                  << "\n";
+    }
+
+    if (!readYesNo("¿Quieres abrir detalles de alguna?")) return;
+    int movieId = readInt("Ingresa movieId: ", 0, 2000000000);
+    const Movie &m = engine.getMovieById(movieId);
+
+    while (true) {
+        printMovieDetails(m, movieId, user);
+        std::cout << "Acciones:\n";
+        std::cout << "  1) Toggle Like\n";
+        std::cout << "  2) Toggle Ver más tarde\n";
+        std::cout << "  3) Volver\n";
+        int a = readInt("Elige acción: ", 1, 3);
+        if (a == 3) break;
+        if (a == 1) user.toggleLike(movieId);
+        if (a == 2) user.toggleWatchLater(movieId);
+    }
+}
+
+// ------------------ Flujo: ver resultados y elegir ------------------
+static void browseResults(SearchEngine &engine,
+                          const std::string &query_norm,
+                          bool is_phrase,
+                          UserState &user) {
+    constexpr size_t PAGE = 5;
+    size_t offset = 0;
+
+    while (true) {
+        std::vector<SearchResult> page = is_phrase
+            ? engine.searchPhrase(query_norm, offset, PAGE)
+            : engine.searchSubstring(query_norm, offset, PAGE);
+
+        // Modelo A: boost por like del usuario + ordenar SOLO esta página
+        applyUserBoostAndSort(page, user);
+
+        clearLine();
+        std::cout << "Resultados (" << (is_phrase ? "FRASE" : "SUBSTRING")
+                  << ") query=\"" << query_norm << "\""
+                  << "  [offset=" << offset << "]\n";
+        clearLine();
+
+        if (page.empty()) {
+            std::cout << "No hay más resultados.\n";
+        } else {
+            for (size_t i = 0; i < page.size(); ++i) {
+                int id = page[i].movieId;
+                const Movie &m = engine.getMovieById(id);
+                printMovieCard(m, id, page[i].score, user);
+            }
+        }
+
+        std::cout << "\nOpciones:\n";
+        std::cout << "  1) Ver detalles (por ID)\n";
+        std::cout << "  2) Siguiente página\n";
+        std::cout << "  3) Página anterior\n";
+        std::cout << "  4) Salir a menú\n";
+
+        int op = readInt("Elige opción: ", 1, 4);
+
+        if (op == 4) return;
+        if (op == 2) { offset += PAGE; continue; }
+        if (op == 3) { offset = (offset >= PAGE) ? (offset - PAGE) : 0; continue; }
+
+        int movieId = readInt("Ingresa movieId: ", 0, 2000000000);
+        const Movie &m = engine.getMovieById(movieId);
+
+        while (true) {
+            printMovieDetails(m, movieId, user);
+            std::cout << "Acciones:\n";
+            std::cout << "  1) Toggle Like (reordena resultados)\n";
+            std::cout << "  2) Toggle Ver más tarde\n";
+            std::cout << "  3) Volver a resultados\n";
+
+            int a = readInt("Elige acción: ", 1, 3);
+            if (a == 3) break;
+
+            if (a == 1) {
+                user.toggleLike(movieId);
+                // volvemos a resultados para recalcular y ver el reordenamiento
+                break;
+            } else if (a == 2) {
+                user.toggleWatchLater(movieId);
+            }
+        }
+    }
+}
+
 // ------------------ main ------------------
 int main() {
-    // Formato consistente de decimales
     std::cout.setf(std::ios::fixed);
     std::cout << std::showpoint << std::setprecision(3);
 
     SearchEngine engine;
     UserState user;
 
-    // 1) Carga e indexado
-    {
-        std::string path = "resources/mpst_full_data.csv";
+    // Path por defecto
+    std::string path = "resources/mpst_full_data.csv";
 
-        // if (path.empty()) {
-        //     std::cout << "No se proporcionó ruta. Saliendo.\n";
-        //     return 0;
-        // }
+    std::cout << "[MAIN] Cargando CSV: " << path << std::endl;
+    engine.load(path);
+    std::cout << "[MAIN] CSV cargado. Construyendo índices..." << std::endl;
+    engine.buildIndexes();
+    std::cout << "[MAIN] Índices listos.\n";
 
-        engine.load(path); // <-- reemplaza por tu API
-        engine.buildIndexes(); // <-- trigram + wordIndex + tags, etc.
-    }
-
-    // 2) Loop menú
     while (true) {
         clearLine();
         std::cout << "PLATAFORMA DE STREAMING (Consola)\n";
@@ -243,18 +310,18 @@ int main() {
         std::cout << "1) Buscar (palabra / substring)\n";
         std::cout << "2) Buscar (frase)\n";
         std::cout << "3) Ver 'Ver más tarde'\n";
-        std::cout << "4) Salir\n";
+        std::cout << "4) Ver películas likeadas\n";
+        std::cout << "5) Salir\n";
 
-        int op = readInt("Elige opción: ", 1, 4);
-        if (op == 4) break;
+        int op = readInt("Elige opción: ", 1, 5);
+        if (op == 5) break;
 
-        if (op == 3) {
-            showWatchLater(engine, user);
-            continue;
-        }
+        if (op == 3) { showWatchLater(engine, user); continue; }
+        if (op == 4) { showLiked(engine, user); continue; }
 
         std::string q = readLine("Query: ");
         q = normalizar_texto(q);
+
         if (q.empty()) {
             std::cout << "Query vacía.\n";
             continue;
