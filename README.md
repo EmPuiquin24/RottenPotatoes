@@ -49,7 +49,7 @@ No hay requisitos especiales. El programa funciona en cualquier computadora mode
 ## Instalación
 Clonar el repositorio:
 ```bash
-git clone <url-del-repo>
+git clone git@github.com:EmPuiquin24/RottenPotatoes.git
 cd RottenPotatoes 
 ```
 
