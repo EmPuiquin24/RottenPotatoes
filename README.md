@@ -1,9 +1,9 @@
 # Programación III: Proyecto Final (2026-0)
 ## Integrantes: 
 - Hector Emilio Huaman Puiquin
-- Gerald Marcelo Borjas Ludwing Von Quispe 
-- Alguien 1
-- Alguien 2
+- Gerald Fernando Marcelo Borjas Bernaola 
+- Sebastian Vir Briceño Gora
+- Paul Ricardo Quispe Maguiña
 
 ## Tabla de Contenidos
 - [Introducción](#introducción)
