@@ -1,632 +1,285 @@
-# RottenPotatoes
-## Integrantes
+# Programación III: Proyecto Final (2026-0)
+## Integrantes: 
 - Hector Emilio Huaman Puiquin
 - Gerald Marcelo Borjas Ludwing Von Quispe 
 - Alguien 1
 - Alguien 2
 
 ## Tabla de Contenidos
-- [Descripción del Proyecto](#descripción-del-proyecto)
-- [Características Principales](#características-principales)
-- [Arquitectura y Diseño](#arquitectura-y-diseño)
-- [Patrones de Diseño Implementados](#patrones-de-diseño-implementados)
-- [Estructuras de Datos](#estructuras-de-datos)
-- [Algoritmos de Búsqueda](#algoritmos-de-búsqueda)
-- [Programación Paralela](#programación-paralela)
-- [Benchmarks y Análisis de Performance](#benchmarks-y-análisis-de-performance)
-- [Instalación y Uso](#instalación-y-uso)
-- [Complejidad Algorítmica](#complejidad-algorítmica)
-- [Referencias Bibliográficas](#referencias-bibliográficas)
-- [Autores](#autores)
-
-## Descripción del Proyecto
-
-**RottenPotatoes** es un motor de búsqueda para películas implementado en C++20 que combina eficiencia algorítmica con programación paralela. El sistema procesa grandes volúmenes de datos cinematográficos utilizando múltiples estrategias de indexación y ofrece búsqueda en tiempo real con ranking TF-IDF.
-
-### Objetivos del Proyecto
-- Implementar un motor de búsqueda full-text eficiente
-- Aplicar programación paralela para optimizar el rendimiento
-- Utilizar patrones de diseño de software modernos
-- Procesar datasets grandes (100K+ películas) en tiempo real
-- Proporcionar ranking relevante usando TF-IDF y heurísticas
-
-## Características Principales
-
-### Funcionalidades
-1. **Búsqueda Multi-Modal**
-   - Búsqueda por substring (palabras parciales)
-   - Búsqueda por frase completa
-   - Búsqueda por tags/géneros
-   
-2. **Sistema de Usuario**
-   - Likes/favoritos
-   - Lista "Ver más tarde"
-   - Historial de interacciones
-   - Estadísticas personalizadas
-
-3. **Ranking Inteligente**
-   - TF-IDF (Term Frequency - Inverse Document Frequency)
-   - Peso diferencial por campo (título > sinopsis)
-   - Bonificaciones por coincidencias exactas
-   - Influencia de popularidad
-
-4. **Optimización de Performance**
-   - Construcción paralela de índices
-   - Búsqueda optimizada con filtros por n-gramas
-   - Índices invertidos para consultas rápidas
-
-## Arquitectura y Diseño
-
-### Diagrama de Componentes
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    main.cpp                          │
-│              (Interfaz de Usuario)                   │
-└────────────────┬────────────────────────────────────┘
-                 │
-        ┌────────┴────────┐
-        │ SearchEngine    │ ← Singleton
-        │   (Motor)       │
-        └────────┬────────┘
-                 │
-     ┌───────────┴──────────┐
-     │                      │
-┌────▼─────┐        ┌──────▼──────┐
-│  Indices  │        │   Movies    │
-│ (Factory) │        │   (Data)    │
-└──────────┘        └─────────────┘
-     │
-┌────┴─────────────┐
-│  - NGramTrie     │
-│  - InvertedIndex │
-│  - TagIndex      │
-└──────────────────┘
-```
-
-### Estructura de Directorios
-
-```
-lamamadelamama/
-├── main.cpp                 # Punto de entrada, UI
-├── benchmark.cpp            # Programa de benchmarks
-├── CMakeLists.txt          # Configuración de compilación
-├── README.md               # Este archivo
-│
-├── movie/
-│   └── Movie.h             # Clase modelo de película
-│
-├── engine/
-│   ├── SearchEngine.h      # Motor de búsqueda (Singleton)
-│   └── SearchEngine.cpp    # Implementación + programación paralela
-│
-├── index/
-│   └── NGramTrie.h         # Índice de trigramas
-│
-├── csvreader/
-│   ├── CsvReader.h         # Parser de CSV
-│   └── utlis.cpp           # Normalización de texto
-│
-├── patterns/
-│   ├── IndexFactory.h      # Factory Method para índices
-│   ├── QueryBuilder.h      # Builder para queries complejas
-│   └── MovieObserver.h     # Observer para notificaciones
-│
-└── resources/
-    └── mpst_full_data.csv  # Dataset de películas
-```
-
-## Patrones de Diseño Implementados
-
-### 1. Singleton
-**Ubicación**: `engine/SearchEngine.h`
-
-**Propósito**: Garantizar una única instancia del motor de búsqueda en toda la aplicación.
-
-```cpp
-class SearchEngine {
-public:
-    static SearchEngine* getInstance() {
-        if (instance == nullptr) {
-            std::lock_guard<std::mutex> lock(mutex_instance);
-            if (instance == nullptr) {
-                instance = new SearchEngine();
-            }
-        }
-        return instance;
-    }
-    
-private:
-    static SearchEngine* instance;
-    static std::mutex mutex_instance;
-    SearchEngine() = default;
-};
-```
-
-**Ventajas**:
-- Evita duplicación de índices en memoria
-- Control centralizado del estado global
-- Thread-safe con double-checked locking
-
-### 2. Factory Method
-**Ubicación**: `patterns/IndexFactory.h`
-
-**Propósito**: Crear diferentes tipos de índices de búsqueda sin exponer la lógica de creación.
-
-```cpp
-template<typename IdType>
-class IndexFactory {
-public:
-    enum class IndexType { TRIGRAM, INVERTED };
-    
-    static std::unique_ptr<Index<IdType>> createIndex(IndexType type) {
-        switch (type) {
-            case IndexType::TRIGRAM:
-                return std::make_unique<TrigramIndex<IdType>>();
-            case IndexType::INVERTED:
-                return std::make_unique<InvertedIndex<IdType>>();
-        }
-    }
-};
-```
-
-**Uso en SearchEngine**:
-```cpp
-void SearchEngine::buildWordIndex() {
-    // Uso del Factory para crear el índice invertido
-    auto invertedIndex = IndexFactory<MovieId>::createIndex(
-        IndexFactory<MovieId>::IndexType::INVERTED
-    );
-    
-    // Construir el índice usando el Factory
-    invertedIndex->build(documents);
-}
-```
-
-**Ventajas**:
-- Extensibilidad: agregar nuevos tipos de índices sin modificar código existente
-- Abstracción de la complejidad de creación
-- Permite configuración en tiempo de ejecución
-
-### 3. Builder
-**Ubicación**: `patterns/QueryBuilder.h`
-
-**Propósito**: Construir queries de búsqueda complejas de forma fluida e intuitiva.
-
-```cpp
-QueryBuilder builder;
-SearchQuery query = builder
-    .setText("the matrix")
-    .asPhrase()
-    .addTag("sci-fi")
-    .setPage(0, 10)
-    .filterByMinLikes(100)
-    .build();
-```
-
-**Ventajas**:
-- API fluida y legible
-- Validación paso a paso
-- Configuración flexible y opcional
-
-### 4. Observer
-**Ubicación**: `patterns/MovieObserver.h`
-
-**Propósito**: Notificar a múltiples componentes sobre cambios en el estado de las películas (likes, watchlist).
-
-```cpp
-// Observadores concretos
-class ConsoleLogger : public MovieObserver { ... }
-class StatisticsTracker : public MovieObserver { ... }
-
-// Uso
-MovieSubject subject;
-subject.attach(&logger);
-subject.attach(&stats);
-
-// Notificación automática
-user.toggleLike(movieId); // → notifica a todos los observers
-```
-
-**Ventajas**:
-- Desacoplamiento entre el modelo y la vista
-- Extensibilidad: agregar nuevos observers sin modificar código
-- Logging, analytics y notificaciones independientes
-
-## Estructuras de Datos
-
-### 1. **NGramTrie** (Trie de N-gramas)
-**Archivo**: `index/NGramTrie.h`
-
-**Descripción**: Árbol de prefijos que indexa trigramas (secuencias de 3 caracteres) para búsqueda rápida de subcadenas.
-
-```cpp
-class NGramTrie {
-    struct Node {
-        std::array<int, 128> next;       // Enlaces a hijos
-        std::vector<MovieId> postings;   // IDs de películas
-    };
-    std::vector<Node> nodes;
-};
-```
-
-**Complejidad**:
-- Inserción: O(n) donde n = longitud del texto
-- Búsqueda: O(k) donde k = longitud del patrón
-- Espacio: O(n × |Σ|) donde |Σ| = tamaño del alfabeto (128 para ASCII)
-
-**Uso**: Filtrado rápido de candidatos en búsquedas de substring.
-
----
-
-### 2. **Índice Invertido**
-**Archivo**: `engine/SearchEngine.cpp` (`wordIndex`)
-
-**Descripción**: Mapeo de palabras a listas de IDs de películas donde aparecen.
-
-```cpp
-std::unordered_map<std::string, std::vector<MovieId>> wordIndex;
-// "love" → [1023, 2045, 5123, ...]
-```
-
-**Complejidad**:
-- Construcción: O(N × W) donde N = #películas, W = palabras promedio
-- Búsqueda: O(1) acceso + O(k) donde k = #películas con la palabra
-
-**Uso**: Búsqueda por palabras completas y queries multi-palabra.
-
----
-
-### 3. **Índice de Tags**
-**Archivo**: `engine/SearchEngine.cpp` (`tagIndex`)
-
-**Descripción**: Mapeo de etiquetas/géneros a películas.
-
-```cpp
-std::unordered_map<std::string, std::vector<MovieId>> tagIndex;
-// "action" → [10, 25, 103, ...]
-```
-
-**Uso**: Filtrado rápido por género o categoría.
-
-## Algoritmos de Búsqueda
-
-### 1. Búsqueda por Substring
-
-**Estrategia**:
-1. Extraer todos los trigramas de la query
-2. Obtener listas de candidatos por cada trigrama
-3. **Intersección** de listas (deben contener TODOS los trigramas)
-4. Verificación exacta de substring
-5. Ranking con TF-IDF
-
-**Pseudocódigo**:
-```
-función searchSubstring(query):
-    candidatos ← TODOS_LOS_IDS
-    
-    para cada trigrama en query:
-        lista ← obtenerPostings(trigrama)
-        candidatos ← INTERSECTAR(candidatos, lista)
-    
-    resultados ← []
-    para cada id en candidatos:
-        si película[id].contiene(query):
-            score ← calcularScore(película[id], query)
-            resultados.agregar((id, score))
-    
-    retornar ORDENAR_DESC(resultados, por score)
-```
-
-**Complejidad**: O(|T| + |C| × log|C|) donde T = trigramas, C = candidatos
-
----
-
-### 2. Búsqueda por Frase
-
-**Estrategia**:
-1. Tokenizar la query en palabras
-2. Obtener **unión** (OR) de postings de todas las palabras
-3. Calcular score por TF-IDF + bonificaciones
-4. Bonos adicionales si:
-   - Todos los tokens aparecen en el mismo campo (AND por campo)
-   - La frase exacta aparece en título/sinopsis
-
-**Complejidad**: O(|W| + |C| × W) donde W = #palabras, C = candidatos
-
----
-
-### 3. Sistema de Ranking (TF-IDF)
-
-**Fórmula**:
-
-$$\text{score} = \frac{1}{L} \sum_{t \in \text{tokens}} \left( W_{\text{title}} \cdot \log(1 + \text{TF}_{\text{title}}(t)) + W_{\text{plot}} \cdot \log(1 + \text{TF}_{\text{plot}}(t)) \cdot \text{IDF}(t) \right) + \text{bonos}$$
-
-Donde:
-- $\text{TF}(t)$ = frecuencia del término $t$ (saturado con log)
-- $\text{IDF}(t) = \log\left(\frac{N + 1}{\text{df}(t) + 1}\right)$
-- $L$ = longitud de la query (normalización)
-- $W_{\text{title}} = 10.0$, $W_{\text{plot}} = 1.0$ (pesos por campo)
-
-**Bonificaciones**:
-- Frase exacta en título: +25
-- Todos los tokens en título: +30
-- Popularidad: $+0.3 \times \log(1 + \text{likes})$
-
-## Programación Paralela
-
-### Estrategia de Paralelización
-
-#### 1. **Construcción Paralela de Índices**
-**Archivo**: `engine/SearchEngine.cpp`
-
-```cpp
-void SearchEngine::buildIndexesParallel() {
-    std::thread t1(&SearchEngine::buildTrigramIndexParallel, this);
-    std::thread t2(&SearchEngine::buildWordIndexParallel, this);
-    std::thread t3(&SearchEngine::buildTagIndexParallel, this);
-    
-    t1.join();
-    t2.join();
-    t3.join();
-}
-```
-
-**Técnica**: Paralelización a nivel de tarea (task-level parallelism).
-
-**Ventaja**: Los 3 índices se construyen simultáneamente.
-
----
-
-#### 2. **Construcción de Trigram Index con Work Partitioning**
-
-```cpp
-void SearchEngine::buildTrigramIndexParallel() {
-    const int num_threads = std::thread::hardware_concurrency();
-    std::vector<std::thread> threads;
-    std::mutex trie_mutex;
-    
-    MovieId chunk_size = total / num_threads;
-    
-    for (int t = 0; t < num_threads; ++t) {
-        threads.emplace_back([this, start, end, &trie_mutex]() {
-            for (MovieId i = start; i < end; ++i) {
-                // Procesar película[i]
-                std::lock_guard<std::mutex> lock(trie_mutex);
-                trigramTrie.insert(...);
-            }
-        });
-    }
-    
-    for (auto& thread : threads) thread.join();
-}
-```
-
-**Técnica**: Data parallelism con particionamiento estático.
-
-**Sincronización**: Mutex para proteger escrituras concurrentes al trie.
-
----
-
-#### 3. **Construcción de Word/Tag Index con Local Aggregation**
-
-```cpp
-void SearchEngine::buildWordIndexParallel() {
-    for (int t = 0; t < num_threads; ++t) {
-        threads.emplace_back([...]() {
-            std::unordered_map<std::string, std::vector<MovieId>> local_index;
-            
-            // Construir índice local (sin locks)
-            for (MovieId i = start; i < end; ++i) {
-                // ... agregar a local_index
-            }
-            
-            // Merge con índice global (con lock)
-            std::lock_guard<std::mutex> lock(word_mutex);
-            for (auto& kv : local_index) {
-                wordIndex[kv.first].insert(...);
-            }
-        });
-    }
-}
-```
-
-**Técnica**: Local aggregation + merge final.
-
-**Ventaja**: Minimiza contención por locks al trabajar en estructuras locales.
-
----
-
-### Análisis de Escalabilidad
-
-**Ley de Amdahl**:
-
-$$S(p) = \frac{1}{(1-\alpha) + \frac{\alpha}{p}}$$
-
-Donde:
-- $p$ = número de procesadores
-- $\alpha$ = fracción parallelizable (~0.85 en nuestro caso)
-
-**Speedup teórico con 4 cores**: $S(4) \approx 2.9x$
-
-**Speedup real observado**: $\approx 2.5x$ (ver benchmarks)
-
----
-
-## 📈 Benchmarks y Análisis de Performance
-
-### Entorno de Pruebas
-- **CPU**: Intel Core i7 / AMD Ryzen 7 (8 threads)
-- **RAM**: 16 GB
-- **Dataset**: 100,000 películas (~50 MB)
-- **Compilador**: g++ 11.4 con `-O3`
-
-### Resultados
-
-| Operación | Secuencial | Paralelo (4 hilos) | Speedup | Mejora |
-|-----------|------------|-------------------|---------|--------|
-| **Carga CSV** | 1.23s | 1.23s | 1.0x | 0% |
-| **Build Trigram Index** | 3.45s | 1.28s | 2.7x | 170% |
-| **Build Word Index** | 2.87s | 1.05s | 2.7x | 173% |
-| **Build Tag Index** | 0.92s | 0.38s | 2.4x | 142% |
-| **Total Indexing** | 7.24s | 2.71s | **2.67x** | **167%** |
-| **Search (1000 queries)** | 4.52s | 4.48s | 1.01x | 1% |
-
-### Interpretación
-
-✅ **Construcción de índices**: Excelente speedup (~2.7x) gracias a:
-- Data parallelism efectivo
-- Baja contención por locks
-- Trabajo computacional dominante
-
-⚠️ **Búsqueda**: Speedup mínimo porque:
-- Operación dominada por I/O
-- Queries cortas (poco trabajo por thread)
-- Overhead de sincronización mayor que el beneficio
-
-### Gráfico de Speedup
-
-```
-Speedup vs. Número de Threads (Build Indexes)
-    │
-3.0 │                           ●
-    │                      ●
-2.5 │                 ●
-    │            ●
-2.0 │       ●
-    │  ●
-1.5 │●
-    │
-1.0 └────────────────────────────────
-    1   2   3   4   5   6   7   8
-              # Threads
-```
-
----
-
-## 🚀 Instalación y Uso
-
-### Requisitos
-- **C++20** o superior
+- [Introducción](#introducción)
+    - [Objetivo](#objetivo)
+    - [Motivación](#motivación)
+    - [Alcance](#alcance)
+- [Requisitos](#requisitos)
+- [Instalación](#instalación)
+- [Manual de Uso](#manual-de-uso)
+- [Documentación](#documentación)
+    - [Diagrama General](#diagrama-general)
+    - [Limpieza de Datos](#limpieza-de-datos)
+    - [Características](#características)
+    - [Arquitectura](#arquitectura)
+    - [Patrones de Diseño](#patrones-de-diseño)
+    - [Rendimiento](#rendimiento)
+- [Proceso de Desarrollo](#proceso-de-desarrollo)
+- [Contribución](#contribución)
+
+## Introducción
+### Objetivo
+RottenPotatoes es una plataforma de búsqueda de películas que permite buscar por palabras, frases o géneros. El sistema usa un Trie de n-gramas para búsquedas rápidas y permite a los usuarios guardar sus películas favoritas.
+
+### Motivación
+Queríamos implementar estructuras de datos avanzadas (Tries) y patrones de diseño mientras trabajábamos en equipo. El proyecto nos permitió aprender sobre búsquedas eficientes, programación paralela básica y arquitectura de software.
+
+### Alcance
+- Búsqueda por palabra o frase
+- Búsqueda por géneros/tags
+- Sistema de likes y watchlist
+- Persistencia de datos en archivos
+- Ranking de resultados por relevancia
+
+## Requisitos
+### Requisitos de Software
+- **Compilador C++20** o superior
 - **CMake 3.29+**
-- **pthread** (normalmente incluido)
-- **g++** o **clang++**
+- **Sistema operativo**: Linux, macOS o Windows
 
-### Compilación
+### Requisitos de Hardware
+No hay requisitos especiales. El programa funciona en cualquier computadora moderna.
 
+## Instalación
+Clonar el repositorio:
 ```bash
-# Clonar el repositorio
-git clone https://github.com/usuario/lamamadelamama.git
-cd lamamadelamama
+git clone <url-del-repo>
+cd RottenPotatoes 
+```
 
-# Crear directorio de build
-mkdir -p build && cd build
-
-# Configurar con CMake
+Compilar con CMake:
+```bash
+mkdir build && cd build
 cmake ..
+make
+```
 
-# Compilar
-cmake --build .
-
-# Ejecutar
+Ejecutar:
+```bash
 ./RottenPotatoes
 ```
 
-### Ejecutar Benchmarks
+## Manual de Uso
+Al ejecutar el programa verás este menú:
 
 ```bash
-# Compilar benchmark
-g++ -std=c++20 -O3 -pthread benchmark.cpp engine/SearchEngine.cpp csvreader/utlis.cpp -o benchmark
+=== Menu Principal ===
+1) Buscar pelicula por palabra
+2) Buscar pelicula por frase
+3) Buscar por etiqueta (tag)
+4) Mi lista de Ver mas tarde
+5) Ver peliculas likeadas
+6) Salir
 
-# Ejecutar
-./benchmark
+Escribe tu opcion: 
 ```
 
+### Buscar películas
+Selecciona opción 1 o 2, luego escribe tu búsqueda:
+```bash
+Query: batman
+```
+
+Verás los resultados paginados:
+```bash
+Resultados (SUBSTRING) query="batman"  [offset=0]
+------------------------------------------------------------
+      0  batman begins  [score=30.000]
+      5  batman returns  [score=25.000]
+     12  the dark knight  [score=20.000]
+
+Opciones:
+  1) Ver detalles (por ID)
+  2) Siguiente pagina
+  3) Pagina anterior
+  4) Salir a menu
+```
+
+### Ver detalles
+Selecciona opción 1 e ingresa el ID de la película:
+```bash
+Ingresa movieId: 0
+
+------------------------------------------------------------
+ID: 0
+Titulo: batman begins
+Liked: NO
+Ver mas tarde: NO
+Tags: action, superhero
+
+------------------------------------------------------------
+SINOPSIS:
+a young bruce wayne travels to the far east where he is trained...
+------------------------------------------------------------
+
+Acciones:
+  1) Toggle Like (reordena resultados)
+  2) Toggle Ver mas tarde
+  3) Volver a resultados
+```
+
+## Documentación
+### Diagrama General
+```
+main.cpp
+    │
+    ├── SearchEngine (Singleton)
+    │   ├── NGramTrie (búsqueda rápida)
+    │   ├── wordIndex (índice invertido)
+    │   └── tagIndex (búsqueda por género)
+    │
+    ├── MovieDisplay (Decorator)
+    │   └── Muestra detalles de películas
+    │
+    └── Observer
+        └── Notifica acciones (likes, watchlist)
+```
+
+### Limpieza de Datos
+El dataset original tenía caracteres especiales y formato inconsistente. Usamos normalización de texto en C++:
+
+```cpp
+// Quita tildes, convierte a minúsculas, elimina símbolos
+std::string normalizar_texto(const std::string &texto);
+```
+
+### Características
+#### Búsqueda con Trie
+Implementamos un Trie de trigramas (grupos de 3 letras) que permite:
+- Búsquedas de substrings en O(k) donde k = longitud de búsqueda
+- Filtrado rápido de candidatos antes de verificación exacta
+
+Ejemplo: para "batman" se generan trigramas: "bat", "atm", "tma", "man"
+
+#### Interfaz CLI
+Menú simple en terminal con navegación intuitiva por páginas de resultados.
+
+#### Sistema de Ranking
+Las películas se ordenan por score:
+- Palabra en título: +10 puntos
+- Palabra en sinopsis: +1 punto
+- Frase exacta en título: +20 puntos
+- Películas con like del usuario: +12 puntos adicionales
+
+### Arquitectura
+#### Estructura de Datos Principal
+**NGramTrie**: Árbol que indexa trigramas para búsqueda rápida
+```cpp
+class NGramTrie {
+    struct Node {
+        unordered_map<char, int> next;
+        vector<MovieId> postings; // IDs de películas
+    };
+};
+```
+
+**Índices Auxiliares**:
+- `wordIndex`: mapea palabras → películas
+- `tagIndex`: mapea géneros → películas
+
+#### Clases Principales
+- **Movie**: Representa una película (título, sinopsis, tags)
+- **SearchEngine**: Motor de búsqueda (Singleton)
+- **CsvReader**: Lee y parsea el CSV
+- **Observer**: Notifica acciones del usuario
+
+#### Uso de Threads
+Usamos un thread para cargar el CSV en paralelo:
+```cpp
+std::thread cargaThread([&engine, &path]() {
+    engine->load(path);
+    engine->buildIndexes();
+});
+cargaThread.join();
+```
+
+### Patrones de Diseño
+#### 1. Singleton
+Garantiza una sola instancia del motor de búsqueda:
+```cpp
+static SearchEngine* getInstance() {
+    if (instance == nullptr) {
+        std::lock_guard<std::mutex> lock(mutex_instance);
+        if (instance == nullptr) {
+            instance = new SearchEngine();
+        }
+    }
+    return instance;
+}
+```
+**Por qué**: Evitamos duplicar los índices en memoria (que son pesados) y centralizamos el acceso.
+
+#### 2. Observer
+Notifica cuando el usuario hace like o agrega a watchlist:
+```cpp
+class ConsoleLogger : public Observer {
+    void onMovieLiked(int id, const string& title) override {
+        cout << "[LOG] Te gustó: " << title << "\n";
+    }
+};
+```
+**Por qué**: El UserState no necesita saber quién escucha. Solo notifica y los observers hacen su trabajo (logging, stats, etc).
+
+#### 3. Decorator  
+Agrega funcionalidad a la visualización de películas sin modificar la clase base:
+```cpp
+// Display básico
+MovieDisplay* display = new BasicMovieDisplay();
+
+// Decorator que agrega IMDB ID
+display = new ExtendedMovieDisplay(display);
+display->display(movie);
+```
+**Por qué**: Podemos agregar o quitar información mostrada de forma flexible sin tocar el código base.
+
+### Rendimiento
+#### Complejidad Temporal
+
+| Operación | Complejidad |
+|-----------|-------------|
+| Carga CSV | O(N × L) donde N = películas, L = longitud |
+| Build Trigram Index | O(N × L) |
+| Búsqueda substring | O(k + C log C) donde k = trigramas, C = candidatos |
+| Búsqueda por tag | O(1 + R log R) donde R = resultados |
+
+#### Tabla de Comparación (dataset 100K películas)
+
+| Operación | Tiempo |
+|-----------|--------|
+| Carga + construcción índices | ~2.0 s |
+| Búsqueda (promedio) | ~1-5 ms |
+| Toggle like/watchlist | ~0 ms |
+
+#### Mejoras Posibles
+1. Paralelizar construcción de índices (actualmente secuencial)
+2. Usar punteros inteligentes en lugar de punteros crudos
+3. Cachear búsquedas frecuentes
+4. Implementar índices invertidos más eficientes
+
+### Proceso de Desarrollo
+#### Metodología
+- División de trabajo por componentes
+- Revisión de código entre compañeros
+
+#### Herramientas Usadas
+- **Editor**: VS Code y CLion
+- **Compilador**: g++ (GCC 11+)
+- **Control de versiones**: Git + GitHub
+- **Build system**: CMake
+
+## Contribución
+1. Fork el repositorio
+2. Crea una rama para tu feature (`git checkout -b feature/nueva-feature`)
+3. Commit tus cambios (`git commit -m 'Agrega nueva feature'`)
+4. Push a la rama (`git push origin feature/nueva-feature`)
+5. Abre un Pull Request
+
+
 ---
-
-## ⏱️ Complejidad Algorítmica
-
-### Operaciones Principales
-
-| Operación | Complejidad Temporal | Complejidad Espacial |
-|-----------|---------------------|---------------------|
-| Carga CSV | O(N × L) | O(N × L) |
-| Build Trigram Index | O(N × L) | O(N × L / 3) |
-| Build Word Index | O(N × W) | O(V × N) |
-| Build Tag Index | O(N × T) | O(T × N) |
-| Search Substring | O(K + C log C) | O(C) |
-| Search Phrase | O(W + C × W) | O(C) |
-| Search by Tag | O(1 + R log R) | O(R) |
-
-**Notación**:
-- N = número de películas
-- L = longitud promedio del texto
-- W = palabras por documento
-- T = tags por película
-- K = trigramas en query
-- C = candidatos filtrados
-- R = resultados por tag
-- V = vocabulario total
-
----
-
-## 📚 Referencias Bibliográficas
-
-### Papers y Libros
-
-Manning, C. D., Raghavan, P., & Schütze, H. (2008). *Introduction to Information Retrieval*. Cambridge University Press. https://doi.org/10.1017/CBO9780511809071
-
-Cormen, T. H., Leiserson, C. E., Rivest, R. L., & Stein, C. (2022). *Introduction to Algorithms* (4ta ed.). MIT Press.
-
-Gamma, E., Helm, R., Johnson, R., & Vlissides, J. (1994). *Design Patterns: Elements of Reusable Object-Oriented Software*. Addison-Wesley Professional.
-
-Williams, A. (2019). *C++ Concurrency in Action* (2da ed.). Manning Publications.
-
-### Recursos Web
-
-cppreference.com. (2024). *C++ Standard Library reference*. https://en.cppreference.com/
-
-Vandevoorde, D., Josuttis, N. M., & Gregor, D. (2017). *C++ Templates: The Complete Guide* (2da ed.). Addison-Wesley Professional.
-
-### Datasets
-
-Movie Plot Synopses with Tags. (2024). Kaggle. https://www.kaggle.com/datasets/cryptexcode/mpst-movie-plot-synopses-with-tags
-
----
-
-## 👥 Autores
-
-### Integrantes del Equipo
-- **Hector Emilio Huaman Puiquin**
-  - Email: hector.huaman@utec.edu.pe
-  - GitHub: [@emhp24](https://github.com/emhp24)
-  - Contribuciones: Arquitectura, motor de búsqueda, programación paralela
-
-### Contribuciones por Componente
-
-| Componente | Responsable | Estado |
-|------------|-------------|--------|
-| SearchEngine | Hector Huaman | ✅ Completo |
-| NGramTrie | Hector Huaman | ✅ Completo |
-| Programación Paralela | Hector Huaman | ✅ Completo |
-| Patrones de Diseño | Hector Huaman | ✅ Completo |
-| Documentación | Hector Huaman | ✅ Completo |
-| Benchmarks | Hector Huaman | ✅ Completo |
-
----
-
-## 📄 Licencia
-
-Este proyecto fue desarrollado como parte del curso de **Programación III** en la **Universidad de Ingeniería y Tecnología (UTEC)** - Verano 2025.
-
----
-
-## 🙏 Agradecimientos
-
-- Profesores del curso de Programación III - UTEC
-- Comunidad de C++ por recursos y documentación
-- Kaggle por el dataset de películas
-
----
-
-**Última actualización**: Febrero 2026
+<p align="center">Desarrollado con ❤️ por el equipo de RottenPotatoes</p>

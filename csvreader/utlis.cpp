@@ -5,7 +5,7 @@
 #include <map>
 
 std::string normalizar_texto(const std::string &texto) {
-    static const std::map<std::string, char> tildes = {
+    const std::map<std::string, char> tildes = {
         {"á", 'a'}, {"é", 'e'}, {"í", 'i'}, {"ó", 'o'}, {"ú", 'u'},
         {"Á", 'a'}, {"É", 'e'}, {"Í", 'i'}, {"Ó", 'o'}, {"Ú", 'u'},
         {"à", 'a'}, {"è", 'e'}, {"ì", 'i'}, {"ò", 'o'}, {"ù", 'u'},

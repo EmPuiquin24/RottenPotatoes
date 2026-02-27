@@ -17,7 +17,7 @@ struct SearchResult {
     double score;
 };
 
-// Patrón Singleton
+// Singleton: solo una instancia del motor de busqueda
 class SearchEngine {
 public:
     using MovieId = uint32_t;
@@ -73,12 +73,9 @@ public:
     std::vector<SearchResult> searchSubstring(const std::string &q_norm,
                                               size_t offset = 0,
                                               size_t limit = 5) const;
-
     std::vector<SearchResult> searchByTag(const std::string &tag_norm,
                                           size_t offset = 0,
                                           size_t limit = 5) const;
-
-
     std::vector<SearchResult> searchPhrase(const std::string &query_norm,
                                            size_t offset = 0,
                                            size_t limit = 5) const;
@@ -90,13 +87,9 @@ public:
                               const std::vector<std::string> &tokens,
                               const std::string &query_norm) const;
 
-    const Movie &getMovieById(int id) const {
-        return movies.at((size_t) id);
-    }
+    const Movie &getMovieById(int id) const { return movies.at((size_t) id); }
 
-    size_t movieCount() const {
-        return movies.size();
-    }
+    size_t movieCount() const { return movies.size(); }
 
     void buildIndexes();
     void load(const std::string& csvPath);

@@ -4,7 +4,6 @@
 #include <sstream>
 
 #include "../csvreader/CsvReader.h"
-#include "../patterns/IndexFactory.h"
 
 SearchEngine* SearchEngine::instance = nullptr;
 std::mutex SearchEngine::mutex_instance;
@@ -207,16 +206,6 @@ static std::vector<std::string> tokenize_ws(const std::string &s) {
 }
 
 void SearchEngine::buildWordIndex() {
-    auto invertedIndex = IndexFactory<MovieId>::createIndex(IndexFactory<MovieId>::IndexType::INVERTED);
-
-    std::vector<std::string> documents;
-    documents.reserve(movies.size());
-    for (const auto &m : movies) {
-        documents.push_back(m.getFullText());
-    }
-
-    invertedIndex->build(documents);
-
     wordIndex.clear();
     wordIndex.reserve(movies.size());
     
