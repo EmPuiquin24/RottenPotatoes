@@ -9,7 +9,6 @@
 class NGramTrie {
 public:
     using MovieId = int;
-
 private:
     struct Node {
         std::unordered_map<char, int> next;

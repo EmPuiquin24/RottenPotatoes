@@ -4,8 +4,10 @@
 - Gerald Fernando Marcelo Borjas Bernaola 
 - Sebastian Vir Briceño Gora
 - Paul Ricardo Quispe Maguiña
+
 ### Grabación
 Nuestra grabación se encuentra en el siguiente enlace:
+https://drive.google.com/file/d/1Qzrs-0eqke7btE6M5TyjIAE9Yi4JjXBg/view?usp=drive_link
 
 ## Tabla de Contenidos
 - [Introducción](#introducción)
