@@ -5,11 +5,10 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <cstdint>
 
 class NGramTrie {
 public:
-    using MovieId = uint32_t;
+    using MovieId = int;
 
 private:
     struct Node {

@@ -3,7 +3,6 @@
 
 #include <vector>
 #include <string>
-#include <cstdint>
 #include <unordered_map>
 #include <thread>
 #include <mutex>
@@ -13,14 +12,14 @@
 
 
 struct SearchResult {
-    uint32_t movieId;
+    int movieId;
     double score;
 };
 
 // Singleton: solo una instancia del motor de busqueda
 class SearchEngine {
 public:
-    using MovieId = uint32_t;
+    using MovieId = int;
 
     static SearchEngine* getInstance() {
         if (instance == nullptr) {

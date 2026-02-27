@@ -6,7 +6,6 @@
 #include "../movie/Movie.h"
 
 // Patron Decorator: para mostrar detalles de peliculas con diferentes niveles de info
-
 class MovieDisplay {
 public:
     virtual void display(const Movie& m) = 0;

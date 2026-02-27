@@ -12,9 +12,11 @@
 #include "patterns/Observer.h"
 #include "patterns/MovieDisplay.h"
 
+
+// Toda esta parte es básicamente showcase
 std::string normalizar_texto(const std::string &texto);
 
-static void limpiar_pantalla() {
+void limpiar_pantalla() {
     #ifdef _WIN32
         std::system("cls");
     #else
@@ -22,18 +24,18 @@ static void limpiar_pantalla() {
     #endif
 }
 
-static void linea() {
+void linea() {
     std::cout << "------------------------------------------------------------\n";
 }
 
-static std::string leer_linea(const std::string &prompt) {
+std::string leer_linea(const std::string &prompt) {
     std::cout << prompt;
     std::string s;
     std::getline(std::cin, s);
     return s;
 }
 
-static int leer_int(const std::string &prompt, int minv, int maxv) {
+int leer_int(const std::string &prompt, int minv, int maxv) {
     while (true) {
         std::string s = leer_linea(prompt);
         try {
@@ -46,7 +48,7 @@ static int leer_int(const std::string &prompt, int minv, int maxv) {
     }
 }
 
-static bool leer_si_no(const std::string &prompt) {
+bool leer_si_no(const std::string &prompt) {
     while (true) {
         std::string s = leer_linea(prompt + " (y/n): ");
         if (s == "y" || s == "Y") return true;
@@ -136,7 +138,7 @@ struct UserState {
 
 const double USER_LIKE_BOOST = 12.0;
 
-static void applyUserBoostAndSort(std::vector<SearchResult>& page,
+void applyUserBoostAndSort(std::vector<SearchResult>& page,
                                  const UserState& user) {
     for (auto& r : page) {
         if (user.isLiked((int)r.movieId)) {
@@ -151,33 +153,31 @@ static void applyUserBoostAndSort(std::vector<SearchResult>& page,
               });
 }
 
-static void printMovieCard(const Movie &m, int movieId, double score, const UserState &user) {
-    std::cout << movieId << "  "
-              << m.getTitle()
-              << "  [score=" << score << "]";
-    if (user.isLiked(movieId)) std::cout << "  <3";
-    if (user.isWatchLater(movieId)) std::cout << "  [WL]";
+void printMovieCard(const Movie &m, int movieId, double score, const UserState &user) {
+    std::cout << "[" << movieId << "] "
+              << m.getTitle();
+    if (user.isLiked(movieId)) std::cout << " ❤️";
+    if (user.isWatchLater(movieId)) std::cout << " 📌";
     std::cout << "\n";
 }
 
-static void printMovieDetails(const Movie &m, int movieId, const UserState &user) {
+void printMovieDetails(const Movie &m, int movieId, const UserState &user) {
     linea();
-    std::cout << "ID: " << movieId << "\n";
     
     // Usar Decorator para mostrar detalles
     MovieDisplay* display = new ExtendedMovieDisplay(new BasicMovieDisplay());
     display->display(m);
     delete display;
     
-    std::cout << "Liked: " << (user.isLiked(movieId) ? "SI" : "NO") << "\n";
+    std::cout << "Me gusta: " << (user.isLiked(movieId) ? "SI" : "NO") << "\n";
     std::cout << "Ver mas tarde: " << (user.isWatchLater(movieId) ? "SI" : "NO") << "\n";
     linea();
 }
 
-static void showWatchLater(SearchEngine &engine, UserState &user) {
+void showWatchLater(SearchEngine &engine, UserState &user) {
     limpiar_pantalla();
     linea();
-    std::cout << "VER MAS TARDE (" << user.watchLater.size() << ")\n";
+    std::cout << "VER MAS TARDE\n";
     linea();
 
     if (user.watchLater.empty()) {
@@ -191,21 +191,21 @@ static void showWatchLater(SearchEngine &engine, UserState &user) {
 
     for (int id : ids) {
         const Movie &m = engine.getMovieById(id);
-        std::cout << id << "  " << m.getTitle()
-                  << (user.isLiked(id) ? "  <3" : "")
+        std::cout << "[" << id << "] " << m.getTitle()
+                  << (user.isLiked(id) ? " ❤️" : "")
                   << "\n";
     }
 
-    if (!leer_si_no("Quieres abrir detalles de alguna?")) return;
-    int movieId = leer_int("Ingresa movieId: ", 0, 2000000000);
+    if (!leer_si_no("Quieres ver detalles de alguna?")) return;
+    int movieId = leer_int("Ingresa el numero de pelicula: ", 0, 2000000000);
     const Movie &m = engine.getMovieById(movieId);
 
     while (true) {
         limpiar_pantalla();
         printMovieDetails(m, movieId, user);
         std::cout << "Acciones:\n";
-        std::cout << "  1) Toggle Like\n";
-        std::cout << "  2) Toggle Ver mas tarde\n";
+        std::cout << "  1) Me gusta\n";
+        std::cout << "  2) Guardar para ver mas tarde\n";
         std::cout << "  3) Volver\n";
         int a = leer_int("Elige accion: ", 1, 3);
         if (a == 3) break;
@@ -214,14 +214,14 @@ static void showWatchLater(SearchEngine &engine, UserState &user) {
     }
 }
 
-static void showLiked(SearchEngine &engine, UserState &user) {
+void showLiked(SearchEngine &engine, UserState &user) {
     limpiar_pantalla();
     linea();
-    std::cout << "PELICULAS LIKEADAS (" << user.liked.size() << ")\n";
+    std::cout << "MIS FAVORITAS\n";
     linea();
 
     if (user.liked.empty()) {
-        std::cout << "No tienes peliculas likeadas.\n";
+        std::cout << "No tienes peliculas favoritas.\n";
         leer_linea("Presiona Enter para volver...");
         return;
     }
@@ -231,21 +231,21 @@ static void showLiked(SearchEngine &engine, UserState &user) {
 
     for (int id : ids) {
         const Movie &m = engine.getMovieById(id);
-        std::cout << id << "  " << m.getTitle()
-                  << (user.isWatchLater(id) ? "  [WL]" : "")
+        std::cout << "[" << id << "] " << m.getTitle()
+                  << (user.isWatchLater(id) ? " 📌" : "")
                   << "\n";
     }
 
-    if (!leer_si_no("Quieres abrir detalles de alguna?")) return;
-    int movieId = leer_int("Ingresa movieId: ", 0, 2000000000);
+    if (!leer_si_no("Quieres ver detalles de alguna?")) return;
+    int movieId = leer_int("Ingresa el numero de pelicula: ", 0, 2000000000);
     const Movie &m = engine.getMovieById(movieId);
 
     while (true) {
         limpiar_pantalla();
         printMovieDetails(m, movieId, user);
         std::cout << "Acciones:\n";
-        std::cout << "  1) Toggle Like\n";
-        std::cout << "  2) Toggle Ver mas tarde\n";
+        std::cout << "  1) Me gusta\n";
+        std::cout << "  2) Guardar para ver mas tarde\n";
         std::cout << "  3) Volver\n";
         int a = leer_int("Elige accion: ", 1, 3);
         if (a == 3) break;
@@ -255,12 +255,12 @@ static void showLiked(SearchEngine &engine, UserState &user) {
 }
 
 // ------------------ Flujo: ver resultados y elegir ------------------
-static void browseResults(SearchEngine &engine,
+void browseResults(SearchEngine &engine,
                           const std::string &query_norm,
                           bool is_phrase,
                           UserState &user,
                           bool is_tag = false) {
-    constexpr size_t PAGE = 5;
+    const size_t PAGE = 5;
     size_t offset = 0;
 
     while (true) {
@@ -274,10 +274,7 @@ static void browseResults(SearchEngine &engine,
 
         limpiar_pantalla();
         linea();
-        std::cout << "Resultados ("
-                  << (is_tag ? "TAG" : is_phrase ? "FRASE" : "SUBSTRING")
-                  << ") query=\"" << query_norm << "\""
-                  << "  [offset=" << offset << "]\n";
+        std::cout << "Resultados de busqueda: " << query_norm << "\n";
         linea();
 
         if (page.empty()) {
@@ -293,10 +290,10 @@ static void browseResults(SearchEngine &engine,
         }
 
         std::cout << "\nOpciones:\n";
-        std::cout << "  1) Ver detalles (por ID)\n";
+        std::cout << "  1) Ver detalles de una pelicula\n";
         std::cout << "  2) Siguiente pagina\n";
         std::cout << "  3) Pagina anterior\n";
-        std::cout << "  4) Salir a menu\n";
+        std::cout << "  4) Volver al menu\n";
 
         int op = leer_int("Elige opcion: ", 1, 4);
 
@@ -304,15 +301,15 @@ static void browseResults(SearchEngine &engine,
         if (op == 2) { offset += PAGE; continue; }
         if (op == 3) { offset = (offset >= PAGE) ? (offset - PAGE) : 0; continue; }
 
-        int movieId = leer_int("Ingresa movieId: ", 0, 2000000000);
+        int movieId = leer_int("Ingresa el numero de pelicula: ", 0, 2000000000);
         const Movie &m = engine.getMovieById(movieId);
 
         while (true) {
             limpiar_pantalla();
             printMovieDetails(m, movieId, user);
             std::cout << "Acciones:\n";
-            std::cout << "  1) Toggle Like (reordena resultados)\n";
-            std::cout << "  2) Toggle Ver mas tarde\n";
+            std::cout << "  1) Me gusta\n";
+            std::cout << "  2) Guardar para ver mas tarde\n";
             std::cout << "  3) Volver a resultados\n";
 
             int a = leer_int("Elige accion: ", 1, 3);
@@ -368,7 +365,7 @@ int main() {
         std::cout << "2) Buscar pelicula por frase\n";
         std::cout << "3) Buscar por etiqueta (tag)\n";
         std::cout << "4) Mi lista de Ver mas tarde\n";
-        std::cout << "5) Ver peliculas likeadas\n";
+        std::cout << "5) Mis favoritas\n";
         std::cout << "6) Salir\n";
 
         int op = leer_int("Escribe tu opcion: ", 1, 6);
@@ -377,11 +374,11 @@ int main() {
         if (op == 4) { showWatchLater(*engine, user); continue; }
         if (op == 5) { showLiked(*engine, user); continue; }
 
-        std::string q = leer_linea("Query: ");
+        std::string q = leer_linea("Buscar: ");
         q = normalizar_texto(q);
 
         if (q.empty()) {
-            std::cout << "Query vacia.\n";
+            std::cout << "No ingresaste nada.\n";
             leer_linea("Presiona Enter para continuar...");
             continue;
         }

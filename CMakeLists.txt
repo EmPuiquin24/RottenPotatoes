@@ -20,9 +20,7 @@ add_executable(${PROJECT_NAME} main.cpp ${SOURCES}
         index/NGramTrie.h
         engine/SearchEngine.h
         engine/SearchEngine.cpp
-        patterns/IndexFactory.h
-        patterns/QueryBuilder.h
-        patterns/MovieObserver.h)
+        patterns/Observer.h
+        patterns/MovieDisplay.h)
 
-# Enlazar con la librería de threads
 target_link_libraries(${PROJECT_NAME} Threads::Threads)

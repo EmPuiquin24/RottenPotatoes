@@ -3,14 +3,13 @@
 
 #include <string>
 #include <vector>
-#include <cstdint>
 
 class Movie {
 private:
   std::string imdb_id, title, plot, split, synopsis_source;
   std::vector<std::string> tags;
   std::string full_text;
-  uint32_t likes = 0;
+  int likes = 0;
   bool watch_later = false;
 
 public:
@@ -27,7 +26,7 @@ public:
   const std::string &getFullText() const { return full_text; }
   const std::vector<std::string> &getTags() const { return tags; }
 
-  uint32_t getLikes() const { return likes; }
+  int getLikes() const { return likes; }
   void like() { ++likes; }
   bool isWatchLater() const { return watch_later; }
   void setWatchLater(bool v) { watch_later = v; }

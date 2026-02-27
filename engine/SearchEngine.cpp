@@ -195,7 +195,7 @@ std::vector<SearchResult> SearchEngine::searchByTag(const std::string &tag_norm,
     return std::vector<SearchResult>(results.begin() + offset, results.begin() + end);
 }
 
-static std::vector<std::string> tokenize_ws(const std::string &s) {
+std::vector<std::string> tokenize_ws(const std::string &s) {
     std::vector<std::string> out;
     std::istringstream iss(s);
     std::string tok;

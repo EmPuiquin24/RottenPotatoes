@@ -11,7 +11,6 @@ std::vector<std::string> dividir(const std::string &cadena, char delimitador);
 
 class CsvReader{
 private:
-    // Separa una fila del CSV respetando las comillas
     static std::vector<std::string> separarColumnas(const std::string& fila_logica) {
         std::vector<std::string> columnas;
         std::string celda;
