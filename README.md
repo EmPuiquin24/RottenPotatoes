@@ -154,8 +154,8 @@ std::string normalizar_texto(const std::string &texto);
 ### Características
 #### Búsqueda con Trie
 Implementamos un Trie de trigramas (grupos de 3 letras) que permite:
-- Búsquedas de substrings en O(k) donde k = longitud de búsqueda
-- Filtrado rápido de candidatos antes de verificación exacta
+- Búsquedas de substrings en O(k) donde k = longitud de búsqueda.
+- Filtrado rápido de candidatos antes de verificación exacta.
 
 Ejemplo: para "batman" se generan trigramas: "bat", "atm", "tma", "man"
 
@@ -171,7 +171,7 @@ Las películas se ordenan por score:
 
 ### Arquitectura
 #### Estructura de Datos Principal
-**NGramTrie**: Árbol que indexa trigramas para búsqueda rápida
+**NGramTrie**: Árbol que indexa trigramas para búsqueda rápida.
 ```cpp
 class NGramTrie {
     struct Node {
@@ -186,10 +186,10 @@ class NGramTrie {
 - `tagIndex`: mapea géneros → películas
 
 #### Clases Principales
-- **Movie**: Representa una película (título, sinopsis, tags)
-- **SearchEngine**: Motor de búsqueda (Singleton)
-- **CsvReader**: Lee y parsea el CSV
-- **Observer**: Notifica acciones del usuario
+- **Movie**: Representa una película (título, sinopsis, tags).
+- **SearchEngine**: Motor de búsqueda (Singleton).
+- **CsvReader**: Lee y parsea el CSV.
+- **Observer**: Notifica acciones del usuario.
 
 #### Uso de Threads
 Usamos un thread para cargar el CSV en paralelo:
