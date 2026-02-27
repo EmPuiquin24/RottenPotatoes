@@ -273,13 +273,3 @@ display->display(movie);
 - **Control de versiones**: Git + GitHub
 - **Build system**: CMake
 
-## Contribución
-1. Fork el repositorio
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-feature`)
-3. Commit tus cambios (`git commit -m 'Agrega nueva feature'`)
-4. Push a la rama (`git push origin feature/nueva-feature`)
-5. Abre un Pull Request
-
-
----
-<p align="center">Desarrollado con ❤️ por el equipo de RottenPotatoes</p>
