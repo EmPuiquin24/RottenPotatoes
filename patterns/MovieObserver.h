@@ -6,7 +6,7 @@
 #include <iostream>
 #include <algorithm>
 
-// Patrón Observer para notificar cambios en películas (likes, watchlist, etc.)
+// Patron Observer para notificar cambios en peliculas (likes, watchlist, etc.)
 
 // Interfaz Observer
 class MovieObserver {
@@ -60,27 +60,27 @@ public:
     }
 };
 
-// Implementación concreta: Logger que imprime las notificaciones
+// Implementacion concreta: Logger que imprime las notificaciones
 class ConsoleLogger : public MovieObserver {
 public:
     void onMovieLiked(int movieId, const std::string& movieTitle) override {
-        std::cout << "[LOG] ❤️  Te gustó: '" << movieTitle << "' (ID: " << movieId << ")\n";
+        std::cout << "[LOG] <3 Te gusto: '" << movieTitle << "' (ID: " << movieId << ")\n";
     }
     
     void onMovieUnliked(int movieId, const std::string& movieTitle) override {
-        std::cout << "[LOG] 💔 Ya no te gusta: '" << movieTitle << "' (ID: " << movieId << ")\n";
+        std::cout << "[LOG] </3 Ya no te gusta: '" << movieTitle << "' (ID: " << movieId << ")\n";
     }
     
     void onMovieAddedToWatchlist(int movieId, const std::string& movieTitle) override {
-        std::cout << "[LOG] ⏰ Agregado a ver más tarde: '" << movieTitle << "' (ID: " << movieId << ")\n";
+        std::cout << "[LOG] [WL] Agregado a ver mas tarde: '" << movieTitle << "' (ID: " << movieId << ")\n";
     }
     
     void onMovieRemovedFromWatchlist(int movieId, const std::string& movieTitle) override {
-        std::cout << "[LOG] ✅ Removido de ver más tarde: '" << movieTitle << "' (ID: " << movieId << ")\n";
+        std::cout << "[LOG] [OK] Removido de ver mas tarde: '" << movieTitle << "' (ID: " << movieId << ")\n";
     }
 };
 
-// Implementación concreta: Estadísticas
+// Implementacion concreta: Estadisticas
 class StatisticsTracker : public MovieObserver {
 private:
     int totalLikes = 0;
@@ -89,29 +89,18 @@ private:
     int totalWatchlistRemoves = 0;
     
 public:
-    void onMovieLiked(int movieId, const std::string& movieTitle) override {
-        totalLikes++;
-    }
-    
-    void onMovieUnliked(int movieId, const std::string& movieTitle) override {
-        totalUnlikes++;
-    }
-    
-    void onMovieAddedToWatchlist(int movieId, const std::string& movieTitle) override {
-        totalWatchlistAdds++;
-    }
-    
-    void onMovieRemovedFromWatchlist(int movieId, const std::string& movieTitle) override {
-        totalWatchlistRemoves++;
-    }
-    
+    void onMovieLiked(int movieId, const std::string& movieTitle) override { totalLikes++; }
+    void onMovieUnliked(int movieId, const std::string& movieTitle) override { totalUnlikes++; }
+    void onMovieAddedToWatchlist(int movieId, const std::string& movieTitle) override { totalWatchlistAdds++; }
+    void onMovieRemovedFromWatchlist(int movieId, const std::string& movieTitle) override { totalWatchlistRemoves++; }
+
     void printStatistics() const {
-        std::cout << "\n=== Estadísticas de Usuario ===\n";
-        std::cout << "Total de likes: " << totalLikes << "\n";
-        std::cout << "Total de unlikes: " << totalUnlikes << "\n";
-        std::cout << "Agregados a watchlist: " << totalWatchlistAdds << "\n";
-        std::cout << "Removidos de watchlist: " << totalWatchlistRemoves << "\n";
-        std::cout << "=============================\n\n";
+        std::cout << "\n=== Estadisticas de Usuario ===\n";
+        std::cout << "Total de likes:              " << totalLikes << "\n";
+        std::cout << "Total de unlikes:            " << totalUnlikes << "\n";
+        std::cout << "Agregados a watchlist:       " << totalWatchlistAdds << "\n";
+        std::cout << "Removidos de watchlist:      " << totalWatchlistRemoves << "\n";
+        std::cout << "==============================\n\n";
     }
 };
 
