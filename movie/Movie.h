@@ -9,7 +9,7 @@ class Movie {
 private:
   std::string imdb_id, title, plot, split, synopsis_source;
   std::vector<std::string> tags;
-  std::string full_text; // title + " " + plot (normalizado)
+  std::string full_text;
   uint32_t likes = 0;
   bool watch_later = false;
 

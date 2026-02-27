@@ -1,11 +1,11 @@
-# RottenPotatoes 🎬
-## Motor de Búsqueda de Películas con Programación Paralela
+# RottenPotatoes
+## Integrantes
+- Hector Emilio Huaman Puiquin
+- Gerald Marcelo Borjas Ludwing Von Quispe 
+- Alguien 1
+- Alguien 2
 
-[![C++](https://img.shields.io/badge/C++-20-blue.svg)](https://isocpp.org/)
-[![CMake](https://img.shields.io/badge/CMake-3.29-green.svg)](https://cmake.org/)
-[![Threads](https://img.shields.io/badge/Parallel-std::thread-orange.svg)](https://en.cppreference.com/w/cpp/thread)
-
-## 📋 Tabla de Contenidos
+## Tabla de Contenidos
 - [Descripción del Proyecto](#descripción-del-proyecto)
 - [Características Principales](#características-principales)
 - [Arquitectura y Diseño](#arquitectura-y-diseño)
@@ -19,22 +19,18 @@
 - [Referencias Bibliográficas](#referencias-bibliográficas)
 - [Autores](#autores)
 
----
+## Descripción del Proyecto
 
-## 📖 Descripción del Proyecto
-
-**RottenPotatoes** es un motor de búsqueda avanzado para películas implementado en C++20 que combina eficiencia algorítmica con programación paralela. El sistema procesa grandes volúmenes de datos cinematográficos utilizando múltiples estrategias de indexación y ofrece búsqueda en tiempo real con ranking TF-IDF.
+**RottenPotatoes** es un motor de búsqueda para películas implementado en C++20 que combina eficiencia algorítmica con programación paralela. El sistema procesa grandes volúmenes de datos cinematográficos utilizando múltiples estrategias de indexación y ofrece búsqueda en tiempo real con ranking TF-IDF.
 
 ### Objetivos del Proyecto
-- ✅ Implementar un motor de búsqueda full-text eficiente
-- ✅ Aplicar programación paralela para optimizar el rendimiento
-- ✅ Utilizar patrones de diseño de software modernos
-- ✅ Procesar datasets grandes (100K+ películas) en tiempo real
-- ✅ Proporcionar ranking relevante usando TF-IDF y heurísticas
+- Implementar un motor de búsqueda full-text eficiente
+- Aplicar programación paralela para optimizar el rendimiento
+- Utilizar patrones de diseño de software modernos
+- Procesar datasets grandes (100K+ películas) en tiempo real
+- Proporcionar ranking relevante usando TF-IDF y heurísticas
 
----
-
-## 🎯 Características Principales
+## Características Principales
 
 ### Funcionalidades
 1. **Búsqueda Multi-Modal**
@@ -59,9 +55,7 @@
    - Búsqueda optimizada con filtros por n-gramas
    - Índices invertidos para consultas rápidas
 
----
-
-## 🏗️ Arquitectura y Diseño
+## Arquitectura y Diseño
 
 ### Diagrama de Componentes
 
@@ -122,11 +116,9 @@ lamamadelamama/
     └── mpst_full_data.csv  # Dataset de películas
 ```
 
----
+## Patrones de Diseño Implementados
 
-## 🎨 Patrones de Diseño Implementados
-
-### 1. **Singleton** 🔒
+### 1. Singleton
 **Ubicación**: `engine/SearchEngine.h`
 
 **Propósito**: Garantizar una única instancia del motor de búsqueda en toda la aplicación.
@@ -156,9 +148,7 @@ private:
 - Control centralizado del estado global
 - Thread-safe con double-checked locking
 
----
-
-### 2. **Factory Method** 🏭
+### 2. Factory Method
 **Ubicación**: `patterns/IndexFactory.h`
 
 **Propósito**: Crear diferentes tipos de índices de búsqueda sin exponer la lógica de creación.
@@ -180,14 +170,25 @@ public:
 };
 ```
 
+**Uso en SearchEngine**:
+```cpp
+void SearchEngine::buildWordIndex() {
+    // Uso del Factory para crear el índice invertido
+    auto invertedIndex = IndexFactory<MovieId>::createIndex(
+        IndexFactory<MovieId>::IndexType::INVERTED
+    );
+    
+    // Construir el índice usando el Factory
+    invertedIndex->build(documents);
+}
+```
+
 **Ventajas**:
 - Extensibilidad: agregar nuevos tipos de índices sin modificar código existente
 - Abstracción de la complejidad de creación
 - Permite configuración en tiempo de ejecución
 
----
-
-### 3. **Builder** 🔨
+### 3. Builder
 **Ubicación**: `patterns/QueryBuilder.h`
 
 **Propósito**: Construir queries de búsqueda complejas de forma fluida e intuitiva.
@@ -208,9 +209,7 @@ SearchQuery query = builder
 - Validación paso a paso
 - Configuración flexible y opcional
 
----
-
-### 4. **Observer** 👁️
+### 4. Observer
 **Ubicación**: `patterns/MovieObserver.h`
 
 **Propósito**: Notificar a múltiples componentes sobre cambios en el estado de las películas (likes, watchlist).
@@ -234,9 +233,7 @@ user.toggleLike(movieId); // → notifica a todos los observers
 - Extensibilidad: agregar nuevos observers sin modificar código
 - Logging, analytics y notificaciones independientes
 
----
-
-## 📊 Estructuras de Datos
+## Estructuras de Datos
 
 ### 1. **NGramTrie** (Trie de N-gramas)
 **Archivo**: `index/NGramTrie.h`
@@ -292,9 +289,7 @@ std::unordered_map<std::string, std::vector<MovieId>> tagIndex;
 
 **Uso**: Filtrado rápido por género o categoría.
 
----
-
-## 🔍 Algoritmos de Búsqueda
+## Algoritmos de Búsqueda
 
 ### 1. Búsqueda por Substring
 
@@ -358,9 +353,7 @@ Donde:
 - Todos los tokens en título: +30
 - Popularidad: $+0.3 \times \log(1 + \text{likes})$
 
----
-
-## ⚡ Programación Paralela
+## Programación Paralela
 
 ### Estrategia de Paralelización
 

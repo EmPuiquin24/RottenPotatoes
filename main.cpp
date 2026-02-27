@@ -7,16 +7,13 @@
 #include <sstream>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 
 #include "movie/Movie.h"
 #include "engine/SearchEngine.h"
 #include "patterns/MovieObserver.h"
-#include "patterns/QueryBuilder.h"
 
-// Si tus utils estan en otro lado:
 std::string normalizar_texto(const std::string &texto);
-
-// ------------------ Helpers UI ------------------
 
 static void clear_screen() {
     #ifdef _WIN32
@@ -59,35 +56,48 @@ static bool readYesNo(const std::string &prompt) {
     }
 }
 
-// Primeras N palabras (para no imprimir toda la sinopsis)
-static std::string firstNWords(const std::string& text, size_t n) {
-    std::istringstream iss(text);
-    std::ostringstream oss;
-
-    std::string w;
-    size_t count = 0;
-
-    while (iss >> w) {
-        if (count > 0) oss << ' ';
-        oss << w;
-        ++count;
-        if (count >= n) break;
-    }
-    if (iss >> w) oss << " ...";
-    return oss.str();
-}
-
-// ------------------ Estado del usuario ------------------
 struct UserState {
-    std::unordered_set<int> liked;       // movieId
-    std::unordered_set<int> watchLater;  // movieId
-    MovieSubject* subject;               // Patron Observer
-    SearchEngine* engine;                // Referencia al motor de busqueda
+    std::unordered_set<int> liked;
+    std::unordered_set<int> watchLater;
+    MovieSubject* subject;
+    SearchEngine* engine;
+
+    const std::string likesFile = "likes.txt";
+    const std::string watchLaterFile = "ver_mas_tarde.txt";
 
     UserState() : subject(nullptr), engine(nullptr) {}
     
     void setSubject(MovieSubject* s) { subject = s; }
     void setEngine(SearchEngine* e) { engine = e; }
+
+    void cargarDatos() {
+        std::ifstream file(likesFile);
+        int id;
+        while (file >> id) {
+            liked.insert(id);
+        }
+        file.close();
+
+        std::ifstream file2(watchLaterFile);
+        while (file2 >> id) {
+            watchLater.insert(id);
+        }
+        file2.close();
+    }
+
+    void guardarDatos() {
+        std::ofstream file(likesFile, std::ios::trunc);
+        for (int id : liked) {
+            file << id << "\n";
+        }
+        file.close();
+
+        std::ofstream file2(watchLaterFile, std::ios::trunc);
+        for (int id : watchLater) {
+            file2 << id << "\n";
+        }
+        file2.close();
+    }
 
     bool isLiked(int id) const { return liked.find(id) != liked.end(); }
     bool isWatchLater(int id) const { return watchLater.find(id) != watchLater.end(); }
@@ -102,6 +112,7 @@ struct UserState {
             liked.insert(id);
             if (subject) subject->notifyMovieLiked(id, title);
         }
+        guardarDatos();
     }
 
     void toggleWatchLater(int id) {
@@ -114,11 +125,10 @@ struct UserState {
             watchLater.insert(id);
             if (subject) subject->notifyMovieAddedToWatchlist(id, title);
         }
+        guardarDatos();
     }
 };
 
-// ------------------ Boost de usuario en ranking (Modelo A) ------------------
-// Ajusta si quieres que el like tenga mas/menos impacto.
 constexpr double USER_LIKE_BOOST = 12.0;
 
 // Aplica boost SOLO a la pagina actual y reordena esa pagina (simple y efectivo).
@@ -137,7 +147,6 @@ static void applyUserBoostAndSort(std::vector<SearchResult>& page,
               });
 }
 
-// ------------------ Render de película ------------------
 static void printMovieCard(const Movie &m, int movieId, double score, const UserState &user) {
     std::cout << std::setw(6) << movieId << "  "
               << m.getTitle()
@@ -165,17 +174,11 @@ static void printMovieDetails(const Movie &m, int movieId, const UserState &user
     }
 
     clearLine();
-    std::cout << "SINOPSIS (primeras 100 palabras):\n";
-    std::cout << firstNWords(m.getPlot(), 100) << "\n";
+    std::cout << "SINOPSIS:\n";
+    std::cout << m.getPlot() << "\n";
     clearLine();
-
-    if (readYesNo("Mostrar sinopsis completa?")) {
-        std::cout << m.getPlot() << "\n";
-        clearLine();
-    }
 }
 
-// ------------------ Watch Later Home ------------------
 static void showWatchLater(SearchEngine &engine, UserState &user) {
     clear_screen();
     clearLine();
@@ -216,7 +219,6 @@ static void showWatchLater(SearchEngine &engine, UserState &user) {
     }
 }
 
-// ------------------ Liked Home ------------------
 static void showLiked(SearchEngine &engine, UserState &user) {
     clear_screen();
     clearLine();
@@ -275,8 +277,6 @@ static void browseResults(SearchEngine &engine,
         else
             page = engine.searchSubstring(query_norm, offset, PAGE);
 
-        applyUserBoostAndSort(page, user);
-
         clear_screen();
         clearLine();
         std::cout << "Resultados ("
@@ -333,72 +333,53 @@ static void browseResults(SearchEngine &engine,
     }
 }
 
-// ------------------ main ------------------
 int main() {
     std::cout.setf(std::ios::fixed);
     std::cout << std::showpoint << std::setprecision(3);
 
-    // Usar patron Singleton para SearchEngine
     SearchEngine* engine = SearchEngine::getInstance();
     
-    // Configurar Patron Observer
     MovieSubject subject;
     ConsoleLogger logger;
-    StatisticsTracker stats;
-    
     subject.attach(&logger);
-    subject.attach(&stats);
     
     UserState user;
     user.setSubject(&subject);
     user.setEngine(engine);
+    
+    user.cargarDatos();
 
-    // Path por defecto
-    // std::string path = "../resources/mpst_full_data.csv";
-    std::string path = "resources/mpst_full_data.csv";
+    std::string path = "../resources/mpst_full_data.csv";
 
-    std::cout << "[MAIN] Cargando CSV: " << path << std::endl;
+    std::cout << "Cargando CSV..." << std::endl;
     engine->load(path);
     
-    std::cout << "[MAIN] CSV cargado. Construyendo indices con programacion paralela..." << std::endl;
+    std::cout << "Construyendo indices..." << std::endl;
+    engine->buildIndexes();
+    std::cout << "Listo! Total de peliculas: " << engine->movieCount() << "\n";
 
-    // Usar version paralela para mejor performance
-    auto start = std::chrono::high_resolution_clock::now();
-    engine->buildIndexesParallel();
-    auto end = std::chrono::high_resolution_clock::now();
-    
-    std::chrono::duration<double> elapsed = end - start;
-    std::cout << "[MAIN] Indices construidos en " << elapsed.count() << " segundos.\n";
-    std::cout << "[MAIN] Total de peliculas: " << engine->movieCount() << "\n";
+    if (!user.watchLater.empty()) {
+        std::cout << "\n=== PELICULAS EN VER MAS TARDE ===\n";
+        showWatchLater(*engine, user);
+    }
 
     while (true) {
         clear_screen();
         clearLine();
-        std::cout << "PLATAFORMA DE STREAMING (Consola)\n";
+        std::cout << "Bienvenido a Rotten Potatoes. Elige una opción\n";
         clearLine();
-        std::cout << "1) Buscar (palabra / substring)\n";
-        std::cout << "2) Buscar (frase)\n";
-        std::cout << "3) Buscar por tag\n";
-        std::cout << "4) Ver mas tarde\n";
+        std::cout << "1) Buscar pelicula por palabra\n";
+        std::cout << "2) Buscar pelicula por frase\n";
+        std::cout << "3) Buscar por etiqueta (tag)\n";
+        std::cout << "4) Mi lista de Ver mas tarde\n";
         std::cout << "5) Ver peliculas likeadas\n";
-        std::cout << "6) Ver estadisticas\n";
-        std::cout << "7) Salir\n";
+        std::cout << "6) Salir\n";
 
-        int op = readInt("Elige opcion: ", 1, 7);
-        if (op == 7) break;
+        int op = readInt("Escribe tu opcion: ", 1, 6);
+        if (op == 6) break;
 
         if (op == 4) { showWatchLater(*engine, user); continue; }
         if (op == 5) { showLiked(*engine, user); continue; }
-        if (op == 6) {
-            clear_screen();
-            clearLine();
-            stats.printStatistics();
-            std::cout << "Peliculas likeadas: " << user.liked.size() << "\n";
-            std::cout << "Peliculas en Ver mas tarde: " << user.watchLater.size() << "\n";
-            clearLine();
-            readLine("Presiona Enter para volver...");
-            continue;
-        }
 
         std::string q = readLine("Query: ");
         q = normalizar_texto(q);
@@ -417,6 +398,7 @@ int main() {
         }
     }
 
-    std::cout << "Bye.\n";
+    user.guardarDatos();
+    std::cout << "Vuelve pronto :D.\n";
     return 0;
 }
