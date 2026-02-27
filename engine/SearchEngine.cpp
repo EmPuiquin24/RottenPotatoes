@@ -3,8 +3,14 @@
 #include <cmath>
 #include <cctype>
 #include <sstream>
+#include <thread>
+#include <mutex>
 
-#include "CsvReader.h"
+#include "../csvreader/CsvReader.h"
+
+// Inicializaci\u00f3n de variables est\u00e1ticas del Singleton
+SearchEngine* SearchEngine::instance = nullptr;
+std::mutex SearchEngine::mutex_instance;
 
 
 // --------------- containsAllTokens ----------------
@@ -476,6 +482,156 @@ void SearchEngine::buildIndexes() {
     buildTrigramIndex();
     buildWordIndex();
     buildTagIndex();
+}
+
+void SearchEngine::buildIndexesParallel() {
+    // Usar programaci\u00f3n paralela para construir los 3 \u00edndices simult\u00e1neamente
+    std::thread t1(&SearchEngine::buildTrigramIndexParallel, this);
+    std::thread t2(&SearchEngine::buildWordIndexParallel, this);
+    std::thread t3(&SearchEngine::buildTagIndexParallel, this);
+    
+    t1.join();
+    t2.join();
+    t3.join();
+}
+
+// Version paralela de buildTrigramIndex
+void SearchEngine::buildTrigramIndexParallel() {
+    const int num_threads = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
+    std::mutex trie_mutex;
+    
+    MovieId total = (MovieId)movies.size();
+    MovieId chunk_size = (total + num_threads - 1) / num_threads;
+    
+    for (int t = 0; t < num_threads; ++t) {
+        MovieId start = t * chunk_size;
+        MovieId end = std::min(start + chunk_size, total);
+        
+        threads.emplace_back([this, start, end, &trie_mutex]() {
+            for (MovieId i = start; i < end; ++i) {
+                const std::string &text = movies[i].getFullText();
+                if (text.size() < 3) continue;
+                
+                for (size_t j = 0; j + 3 <= text.size(); ++j) {
+                    std::lock_guard<std::mutex> lock(trie_mutex);
+                    trigramTrie.insert(text.substr(j, 3), i);
+                }
+            }
+        });
+    }
+    
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    
+    trigramTrie.finalize();
+}
+
+// Version paralela de buildWordIndex
+void SearchEngine::buildWordIndexParallel() {
+    const int num_threads = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
+    std::mutex word_mutex;
+    
+    MovieId total = (MovieId)movies.size();
+    MovieId chunk_size = (total + num_threads - 1) / num_threads;
+    
+    auto tokenize_ws = [](const std::string &s) {
+        std::vector<std::string> out;
+        std::istringstream iss(s);
+        std::string tok;
+        while (iss >> tok) {
+            if (!tok.empty()) out.push_back(tok);
+        }
+        return out;
+    };
+    
+    for (int t = 0; t < num_threads; ++t) {
+        MovieId start = t * chunk_size;
+        MovieId end = std::min(start + chunk_size, total);
+        
+        threads.emplace_back([this, start, end, &word_mutex, &tokenize_ws]() {
+            std::unordered_map<std::string, std::vector<MovieId>> local_index;
+            
+            for (MovieId i = start; i < end; ++i) {
+                const std::string &text = movies[i].getFullText();
+                auto tokens = tokenize_ws(text);
+                
+                for (const auto &w : tokens) {
+                    if (!w.empty()) local_index[w].push_back(i);
+                }
+            }
+            
+            // Combinar con el \u00edndice global
+            std::lock_guard<std::mutex> lock(word_mutex);
+            for (auto &kv : local_index) {
+                wordIndex[kv.first].insert(wordIndex[kv.first].end(),
+                                          kv.second.begin(), kv.second.end());
+            }
+        });
+    }
+    
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    
+    // Sort + unique para cada palabra
+    for (auto &kv : wordIndex) {
+        sortUnique(kv.second);
+    }
+}
+
+// Version paralela de buildTagIndex
+void SearchEngine::buildTagIndexParallel() {
+    const int num_threads = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
+    std::mutex tag_mutex;
+    
+    MovieId total = (MovieId)movies.size();
+    MovieId chunk_size = (total + num_threads - 1) / num_threads;
+    
+    for (int t = 0; t < num_threads; ++t) {
+        MovieId start = t * chunk_size;
+        MovieId end = std::min(start + chunk_size, total);
+        
+        threads.emplace_back([this, start, end, &tag_mutex]() {
+            std::unordered_map<std::string, std::vector<MovieId>> local_index;
+            
+            for (MovieId i = start; i < end; ++i) {
+                for (const auto &tag : movies[i].getTags()) {
+                    if (tag.empty()) continue;
+                    
+                    std::string tag_norm = tag;
+                    std::transform(tag_norm.begin(), tag_norm.end(), tag_norm.begin(),
+                                 [](unsigned char c) { return std::tolower(c); });
+                    
+                    size_t start_pos = tag_norm.find_first_not_of(" \t\r\n");
+                    if (start_pos == std::string::npos) continue;
+                    size_t end_pos = tag_norm.find_last_not_of(" \t\r\n");
+                    tag_norm = tag_norm.substr(start_pos, end_pos - start_pos + 1);
+                    
+                    if (!tag_norm.empty()) local_index[tag_norm].push_back(i);
+                }
+            }
+            
+            // Combinar con el \u00edndice global
+            std::lock_guard<std::mutex> lock(tag_mutex);
+            for (auto &kv : local_index) {
+                tagIndex[kv.first].insert(tagIndex[kv.first].end(),
+                                         kv.second.begin(), kv.second.end());
+            }
+        });
+    }
+    
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    
+    // Sort + unique para cada tag
+    for (auto &kv : tagIndex) {
+        sortUnique(kv.second);
+    }
 }
 
 void SearchEngine::load(const std::string &csvPath) {
